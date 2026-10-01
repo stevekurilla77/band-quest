@@ -243,7 +243,7 @@ function heroPicker(then){
   let inst = INST_NAME[S.game.inst] ? S.game.inst : 'sax', hair = HAIR_NAME[S.game.hair] ? S.game.hair : 'short';
   const paint = (c, k, h) => { const x = c.getContext('2d'), f = PQSprites.heroFrames(k, h).stand.r; x.imageSmoothingEnabled = false; x.clearRect(0, 0, c.width, c.height); x.drawImage(f, Math.round((c.width - f.width)/2), c.height - f.height - 1); };
   openModal(`<h2 class="pick-title">🎒 Choose your hero</h2><p class="hint">Pick your instrument. You’ll blast music notes with it!</p><div class="inst-grid" id="inst-grid"></div>
-    <div class="lbl">Hair</div><div class="hair-row" id="hair-row">${PQSprites.HAIRS.map(h => `<button class="hair" data-hair="${h}" aria-label="${HAIR_NAME[h]}"><canvas width="26" height="24"></canvas><span>${HAIR_NAME[h]}</span></button>`).join('')}</div>
+    <div class="lbl">Hair</div><div class="hair-row" id="hair-row">${PQSprites.HAIRS.map(h => `<button class="hair" data-hair="${h}" aria-label="${HAIR_NAME[h]}"><canvas width="30" height="24"></canvas><span>${HAIR_NAME[h]}</span></button>`).join('')}</div>
     <button class="btn btn-big btn-yellow" id="hero-ok" style="margin-top:14px">That’s me! ➜</button>`, body => {
     const draw = () => {
       body.querySelector('#inst-grid').innerHTML = insts.map(k => `<button class="inst ${k===inst?'sel':''}" data-inst="${k}" aria-pressed="${k===inst}"><canvas width="36" height="26"></canvas><span>${INST_NAME[k]}</span></button>`).join('');

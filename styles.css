@@ -177,7 +177,7 @@ textarea.txt{resize:vertical}
 .inst.sel{background:var(--yellow);outline:4px solid var(--pink);outline-offset:-7px}
 .hair-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0}
 .hair{border:var(--b);border-radius:14px;background:#fff;box-shadow:3px 3px 0 var(--ink);padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;font-weight:900;font-size:16px;min-height:96px}
-.hair canvas{width:78px;height:72px;image-rendering:pixelated}
+.hair canvas{width:90px;height:72px;image-rendering:pixelated}
 .hair.sel{background:var(--yellow);outline:4px solid var(--pink);outline-offset:-7px}
 
 body.in-game{overflow:hidden}

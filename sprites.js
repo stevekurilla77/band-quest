@@ -27,15 +27,83 @@ const HERO = {}; for (const k in LEGS) HERO[k] = [...HEAD, ...TORSO, ...LEGS[k]]
 const LONG_HAIR = [["....kkk", "..kkhhhk", ".khhHhhk", ".khhHhhk", "khhHhhhk", "khhHhhhk", "khhhHhhk", ".khhHhk", ".khhhhk", "..khhk", "...kk"], 0, 7];
 const HAIR_PAL = { H:'#7a4a22' };
 
-// instruments, drawn over the hero's hands: [rows, offsetX, offsetY]
+// instruments, drawn over the hero (facing right; mouth at col 9,row 11): [rows, offsetX, offsetY]
 const INSTR = {
-  flute:    [["xWWWWWWWWWWWWx", ".k.k.k.k.k"], 8, 10],
-  clarinet: [["Xk", ".kX", ".kk", "..kX", "..kk", "..kkX", "...kk", "..kkkk", ".kkkkkk"], 9, 10],
-  sax:      [["...yk", "..yk", "..yk", ".yyk", ".yyk", "yyyk", "yyyyk", ".yyyy", "..yy"], 9, 10],
-  trumpet:  [["..........y", "yyyyyyyyyyy", "...yYy....yy", "...yyy.....y"], 9, 10],
-  trombone: [["yyyyyyyyyyyyyyy", "y.............y", "yyyyyyyyyyyyyyy", "..yy", ".yyyy"], 8, 10],
-  // euphonium: silver bell pointing up beside the hero's head, three valves, mouthpipe to the lips
-  euphonium:[["....kkkkk", "...kWWWWWk", "....kxxxk", "....kxxxk", ".....kxxk", "kkk..kxxk", "..kkkxxxk", "...kxkxkxk", "...kXkXkXk", "...kxxxxxk", "....kxxxk", ".....kkk"], 10, 6],
+  // flute: silver, held level to the right, lip plate at the lips, key cups along the tube
+  flute: [[
+"...kkk",
+"..kwWWkkkkkkkkkkkk",
+"..kWWxWXWXWXWXWWXk",
+"...kxxXxxxxxxxxxXk",
+"....kkkkkkkkkkkkk"], 8, 10],
+  // clarinet: black wood, silver ligature/rings/keys, barrel, flared bell, angled down & out from the mouth
+  clarinet: [[
+"ooW",
+".kWk",
+"..kXmk",
+"..kXmmk",
+"...kWWk",
+"...kXmWk",
+"....kXmk",
+"....kWWk",
+"...kXmmmk",
+"..kXXmmmmk"], 9, 11],
+  // saxophone: gold body, neck curving from the mouthpiece, key pads, U-bow and an upturned flared bell
+  sax: [[
+"..kkkk",
+".kyyyyk",
+"ookkkyyk..kkkkkkk",
+"....kyytk.kYYYYYk",
+".....kYyk..kyyyk",
+".....kyyk..kyyk",
+".....kYytk.kyyk",
+".....kyyyk.kyyk",
+".....kYyyyykyyk",
+"......kyyyyyyk",
+".......kkkkkk"], 9, 9],
+  // trumpet: mouthpiece + leadpipe, three valves with finger buttons, tubing loop below, flared bell
+  trumpet: [[
+"....W.W.W......kk",
+"...kxkxkxk....kyk",
+"kkkkyyyyyykkkkkyk",
+"oyyyyyyyyyyyyyyyk",
+"kkkkyYyYyYkkkkkyk",
+"...kyyyyyyyyyk.kyk",
+"...kykkkkkkkyk..kk",
+"...kyyyyyyyyyk",
+"....kkkkkkkkk"], 10, 8],
+  // trombone: bell section over the shoulder with a big forward bell, long slide of two parallel tubes
+  trombone: [[
+".......kkk",
+"......kyyk",
+"..kkkkyyYk",
+"..kyyyyyYk",
+"..kkkkyyYk",
+"......kyyk",
+".kkkkkkkkkkkkkk",
+"oyyyyyyyyyyyyyyk",
+"kkkkkkkykkkkkkyk",
+".kyyyyyyyyyyyyyk",
+"..kkkkkykkkkkkk"], 10, 4],
+  // euphonium: silver, big bell pointing UP beside the head, valve block, coiled tubing in front of the chest
+  euphonium: [[
+"...kkkkkkk",
+"..kWWWWWWWk",
+"..kXXXXXXXk",
+"...kxxxxxk",
+"....kWxxk",
+".....kWxk",
+"..W.WkWxk",
+".kxkxkWxk",
+".kxkxkxxk",
+".kxxxxxxxk",
+"okxXxXxxxk",
+"kxxkkkkxxxk",
+"kxkXXXXkxxk",
+"kxkXXXXkxxk",
+"kWxkkkkxxk",
+".kxxxxxxk",
+"..kkkkkk"], 10, 1],
 };
 const NOTE_COLORS = { flute:'#7cc0ff', clarinet:'#b8f35b', sax:'#ffd23f', trumpet:'#ff8c42', trombone:'#ff4f79', euphonium:'#c8b6ff' };
 
@@ -200,7 +268,7 @@ function composite(base, overlay, ox, oy){ const c = document.createElement('can
 function tint(c, color){ const t = document.createElement('canvas'); t.width = c.width; t.height = c.height; const x = t.getContext('2d'); x.drawImage(c,0,0); x.globalCompositeOperation = 'source-atop'; x.fillStyle = color; x.fillRect(0,0,c.width,c.height); return t; }
 
 const cache = {};
-const GOLD = { y:'#ffe14a', Y:'#b07800', W:'#fff3a0', x:'#ffd23f', X:'#b07800', k:'#8a5a00', n:'#d9a520', r:'#ffd23f' };  // golden-instrument reward
+const GOLD = { y:'#ffe14a', Y:'#b07800', t:'#fff3a0', W:'#fff3a0', w:'#fffbe0', x:'#ffd23f', X:'#b07800', m:'#e0a820', o:'#8a5a00', k:'#8a5a00', n:'#d9a520', r:'#ffd23f' };  // golden-instrument reward
 function heroFrames(inst = 'sax', hair = 'short', gold = false){
   if (!INSTR[inst]) inst = 'sax'; if (hair !== 'long') hair = 'short';
   const key = `hero-${inst}-${hair}-${gold ? 'g' : ''}`; if (cache[key]) return cache[key];
