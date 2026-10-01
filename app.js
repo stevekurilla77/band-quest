@@ -41,7 +41,8 @@ const TEACHER_PIN = String((RAW.settings && RAW.settings.teacherPin) || '1234');
 
 // ---------- Arcade rules ----------
 const START_LIVES = 5, LIVES_MAX = 99, CONTINUE_SECS = 9, LISTEN_SECS = 60;   // listen ~60 s to a world's recording -> golden instrument there
-const INST_NAME = { sax:'Sax', trumpet:'Trumpet', flute:'Flute', clarinet:'Clarinet', trombone:'Trombone', drums:'Drums' };
+const INST_NAME = { flute:'Flute', clarinet:'Clarinet', sax:'Saxophone', trumpet:'Trumpet', trombone:'Trombone', euphonium:'Euphonium' };
+const HAIR_NAME = { short:'Short hair', long:'Long hair' };
 const AVATARS = ['🎷','🎺','🥁','🎵','🎶','🎹','🎸','🪘','🦄','🐉','🤖','👾'];
 const BADGES = [
   { id:'stage1',   e:'🚩', n:'First Stage',     d:'Clear any stage' },
@@ -67,8 +68,10 @@ function load(keep){
   if (!keep){ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch(e){ S = fresh(); memOnly = true; } }
   const f = fresh(); for (const k in f) if (S[k] === undefined) S[k] = f[k];
   if (!S.game || typeof S.game !== 'object') S.game = {};
-  const g = S.game, d = { inst:null, skin:0, lives:START_LIVES, score:0, coins:0, continues:0, tubaKO:0, worlds:{}, current:null };
+  const g = S.game, d = { inst:null, hair:'short', lives:START_LIVES, score:0, coins:0, continues:0, tubaKO:0, worlds:{}, current:null };
   for (const k in d) if (g[k] === undefined) g[k] = d[k];
+  if (g.inst && !INST_NAME[g.inst]) g.inst = null;   // retired instrument (drums): the hero picker opens on the next PLAY; progress is kept
+  if (!HAIR_NAME[g.hair]) g.hair = 'short';
   if (!S.arcade){ S.arcade = 3; if (g.lives < START_LIVES) g.lives = START_LIVES; g.score = 0; } // v3 migration: fresh credit of lives
   for (const p of PIECES) gw(p.id);
 }
@@ -150,7 +153,7 @@ let mapHits = [], mapT = 0, mapRaf = 0;
 function renderMap(){
   const c = $('#overworld'); if (!c || !window.PQGame) return;
   const cur = S.game.current && P[S.game.current] && worldOpen(S.game.current) ? S.game.current : (PIECES[0] && PIECES[0].id);
-  mapHits = PQGame.drawOverworld(c, worldsForMap(), { t:mapT, hero:{ inst:S.game.inst || 'sax', skin:S.game.skin }, current:cur });
+  mapHits = PQGame.drawOverworld(c, worldsForMap(), { t:mapT, hero:{ inst:S.game.inst || 'sax', hair:S.game.hair }, current:cur });
 }
 function mapLoop(ts){ mapRaf = 0; if ($('#main').hidden || !$('#game').hidden) return; mapT = ts/1000; renderMap(); mapRaf = setTimeout(() => requestAnimationFrame(mapLoop), 120); }
 function startMapLoop(){ if (!mapRaf) mapRaf = requestAnimationFrame(mapLoop); }
@@ -232,21 +235,22 @@ document.addEventListener('click', e => {
   box.scrollIntoView({ behavior:'smooth', block:'nearest' });
 });
 
-// ---------- Hero picker ----------
+// ---------- Hero picker (instrument + hair; saved in practiceQuest.v1 as game.inst / game.hair) ----------
 function heroPicker(then){
-  const insts = PQSprites.INSTR, names = { sax:'Sax', trumpet:'Trumpet', flute:'Flute', clarinet:'Clarinet', trombone:'Trombone', drums:'Drums' };
-  let inst = S.game.inst || 'sax', skin = S.game.skin || 0;
+  const insts = PQSprites.INSTR.filter(k => INST_NAME[k]);
+  let inst = INST_NAME[S.game.inst] ? S.game.inst : 'sax', hair = HAIR_NAME[S.game.hair] ? S.game.hair : 'short';
+  const paint = (c, k, h) => { const x = c.getContext('2d'), f = PQSprites.heroFrames(k, h).stand.r; x.imageSmoothingEnabled = false; x.clearRect(0, 0, c.width, c.height); x.drawImage(f, Math.round((c.width - f.width)/2), c.height - f.height - 1); };
   openModal(`<h2 class="pick-title">🎒 Choose your hero</h2><p class="hint">Pick your instrument. You’ll blast music notes with it!</p><div class="inst-grid" id="inst-grid"></div>
-    <div class="lbl">Skin tone</div><div class="chips" id="skin-chips">${PQSprites.SKINS.map((s,i)=>`<button class="chip skin" data-skin="${i}" style="background:${s[0]}" aria-label="skin tone ${i+1}"></button>`).join('')}</div>
+    <div class="lbl">Hair</div><div class="hair-row" id="hair-row">${PQSprites.HAIRS.map(h => `<button class="hair" data-hair="${h}" aria-label="${HAIR_NAME[h]}"><canvas width="26" height="24"></canvas><span>${HAIR_NAME[h]}</span></button>`).join('')}</div>
     <button class="btn btn-big btn-yellow" id="hero-ok" style="margin-top:14px">That’s me! ➜</button>`, body => {
     const draw = () => {
-      body.querySelector('#inst-grid').innerHTML = insts.map(k => `<button class="inst ${k===inst?'sel':''}" data-inst="${k}"><canvas width="36" height="26"></canvas><span>${names[k]}</span></button>`).join('');
-      body.querySelectorAll('.inst').forEach(b => { const c = b.querySelector('canvas'), x = c.getContext('2d'), f = PQSprites.heroFrames(b.dataset.inst, skin).stand.r; x.imageSmoothingEnabled = false; x.drawImage(f, 2, 2); });
-      body.querySelectorAll('.skin').forEach(b => b.classList.toggle('sel', +b.dataset.skin === skin));
+      body.querySelector('#inst-grid').innerHTML = insts.map(k => `<button class="inst ${k===inst?'sel':''}" data-inst="${k}" aria-pressed="${k===inst}"><canvas width="36" height="26"></canvas><span>${INST_NAME[k]}</span></button>`).join('');
+      body.querySelectorAll('.inst').forEach(b => paint(b.querySelector('canvas'), b.dataset.inst, hair));
+      body.querySelectorAll('.hair').forEach(b => { b.classList.toggle('sel', b.dataset.hair === hair); b.setAttribute('aria-pressed', b.dataset.hair === hair); paint(b.querySelector('canvas'), inst, b.dataset.hair); });
     };
     draw();
-    body.addEventListener('click', e => { const i = e.target.closest('[data-inst]'), k = e.target.closest('[data-skin]'); if (i){ inst = i.dataset.inst; sfx.blip(); draw(); } if (k){ skin = +k.dataset.skin; draw(); } });
-    body.querySelector('#hero-ok').onclick = () => { S.game.inst = inst; S.game.skin = skin; save(); modalClose = null; closeModal(); renderAll(); then && then(); };
+    body.addEventListener('click', e => { const i = e.target.closest('[data-inst]'), h = e.target.closest('[data-hair]'); if (i){ inst = i.dataset.inst; sfx.blip(); draw(); } if (h){ hair = h.dataset.hair; sfx.blip(); draw(); } });
+    body.querySelector('#hero-ok').onclick = () => { S.game.inst = inst; S.game.hair = hair; save(); modalClose = null; closeModal(); renderAll(); then && then(); };
   });
 }
 
@@ -266,7 +270,7 @@ function playStage(id, i, bossHp){
   const back = html => { $('#game').hidden = true; document.body.classList.remove('in-game'); renderAll(); startMapLoop(); if (html) openModal(html); };
   PQGame.start($('#game-canvas'), $('#game'), {
     world:p.world, seed:p.id, level:i === 3 ? 'boss' : i, label:i === 3 ? 'BOSS' : `WORLD ${p.lv}-${i+1}`, bossName:p.boss,
-    inst:S.game.inst, skin:S.game.skin, lives:S.game.lives, coinBase:S.game.score % 100, bossHp:i === 3 ? bossHp : 0, golden:!!gw(id).golden, tuba, sfx:S.sound, music:S.music,
+    inst:S.game.inst, hair:S.game.hair, worldNo:p.lv, lives:S.game.lives, coinBase:S.game.score % 100, bossHp:i === 3 ? bossHp : 0, golden:!!gw(id).golden, tuba, sfx:S.sound, music:S.music,
     onLifeLost:l => { S.game.lives = Math.max(0, Math.min(LIVES_MAX, l)); save(); },   // also called on a 1-UP
     onPause:pz => { $('#pause-menu').hidden = !pz; },
     onClear:r => { const w = gw(id); S.game.coins += r.coins; S.game.score += r.coins; S.game.lives = r.lives; tubaTally(r); if (r.tuba > 0) tubaCarry = { id, ammo:r.tuba };

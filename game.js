@@ -5,9 +5,18 @@
 const SP = window.PQSprites;
 const W = 256, H = 224, TS = 16, ROWS = 14;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const ENEMY_FLY = { wisp:true, ghost:true };
+const ENEMY_FLY = { wisp:true, ghost:true, dragon:true };
 // GIANT TUBA power-up: rare pickup (one golden ♪ block per stage) that fires arcing bass bombs
 const TUBA = { ammo:5, cool:.8, radius:34, bossDmg:3 };
+// "Mix-in" enemies: they join every world's own enemy (see mixEnemies). w/h = hitbox, hp = note hits needed (one stomp or one bass bomb always wins).
+const ENEMY_KIND = {
+  dino:    { w:18, h:18, hp:2, speed:22 },            // Mr. Dinosaur: big, slow walker, takes 2 notes
+  meep:    { w:12, h:14, hop:true, speed:40 },        // Meep the green alien: hops back and forth
+  dragon:  { w:14, h:12, wave:true, speed:34 },       // Sparky the little dragon: flies in a wave
+  hedgehog:{ w:14, h:10, archer:true, speed:8 },      // hedgehog archer: shuffles, winds up, throws a slow toy arrow
+};
+// hedgehog fairness: only throws at a hero who is on screen and not too close, warns first (wind-up + "!"), one arrow at a time, long cooldown
+const ARCHER = { range:168, min:30, rise:56, wind:.8, cool:2.8, speed:72, life:3.2, first:1.6 };
 
 // ---------- themes ----------
 const THEMES = {
@@ -161,7 +170,7 @@ function tiles(th){
 }
 
 // ---------- level generation (seeded, so each piece's levels are always the same) ----------
-function genLevel(seed, idx, enemyType){
+function genLevel(seed, idx, enemyType, world = 1){
   const R = rng(hash(seed + '#' + idx)), w = 200 + idx*30, map = new Uint8Array(w*ROWS);
   const coins = [], enemies = [], gTop = new Array(w).fill(ROWS), flyer = !!ENEMY_FLY[enemyType];
   const setCol = (x, top) => { if (x >= w) return; gTop[x] = top; for (let y = top; y < ROWS; y++) map[y*w + x] = 1; };
@@ -191,6 +200,7 @@ function genLevel(seed, idx, enemyType){
   const nearGap = ex => { for (let k = ex - 4; k <= ex + 4; k++) if (k >= 0 && k < w && gTop[k] >= ROWS) return true; return false; };
   for (let i = enemies.length - 1; i >= 0; i--){ const e = enemies[i]; if ((!e.fly || idx < 2) && nearGap(Math.floor(e.x/TS))) enemies.splice(i, 1); }
   const tuba = addTubaSecrets(seed, idx, w, map, gTop, coins, enemies, cp, st);
+  mixEnemies(seed, idx, world, w, map, gTop, enemies, cp);
   return { w, map, coins, enemies, gTop, cpX:cp*TS, goalX:(w - 10)*TS, startX:2*TS, tuba };
 }
 // Tile 8 = golden ♪ "tuba block" (one per stage, hidden high above a pillar when possible); tile 7 = wooden crate (tuba bombs break it).
@@ -218,6 +228,35 @@ function addTubaSecrets(seed, idx, w, map, gTop, coins, enemies, cp, st){
   for (const c of piles){ const t = gTop[c]; for (const [dx, dy] of [[0,1],[1,1],[1,2],[2,1]]) map[(t - dy)*w + c + dx] = 7;
     for (let i = coins.length - 1; i >= 0; i--){ const tx = Math.floor(coins[i].x/TS), ty = Math.floor(coins[i].y/TS); if (at(tx, ty) === 7) coins.splice(i, 1); } }
   return spot ? { x:spot.x, y:spot.y, piles } : { piles };
+}
+// Swap some of the world's enemies for the mix-in enemies (own seeded RNG, run AFTER the layout/tuba/crates are placed, so maps are unchanged).
+// Every stage of every world gets some. Stage 1 of World 1 starts with Meep + Mr. Dinosaur; dragons join from 1-2 and hedgehogs from 1-3;
+// from World 2 on all four can appear in every stage. The share of mix-ins grows a little with the stage and the world.
+function mixEnemies(seed, idx, world, w, map, gTop, enemies, cp){
+  if (!enemies.length) return;
+  const M = rng(hash(seed + '#' + idx + '#mix')), pool = ['meep', 'dino'];
+  if (idx >= 1 || world >= 2) pool.push('dragon'); if (idx >= 2 || world >= 2) pool.push('hedgehog');
+  for (let i = pool.length - 1; i > 0; i--){ const j = Math.floor(M()*(i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const share = Math.min(.55, .3 + .04*(world - 1) + .06*idx), n = Math.min(enemies.length, Math.max(pool.length, Math.round(enemies.length*share)));
+  const order = enemies.map((e, i) => i).sort((a, b) => enemies[a].x - enemies[b].x), picks = [];
+  for (let k = 0; k < n; k++){ const i = order[Math.min(order.length - 1, Math.floor((k + .2 + M()*.6)*order.length/n))]; if (!picks.includes(i)) picks.push(i); }
+  const at = (x, y) => (x < 0 || x >= w || y < 0 || y >= ROWS) ? 0 : map[y*w + x];
+  const nearGap = c => { for (let k = c - 4; k <= c + 4; k++) if (k < 0 || k >= w || gTop[k] >= ROWS) return true; return false; };
+  const flat = (c, r) => { for (let k = c - r; k <= c + r; k++) if (gTop[k] !== gTop[c]) return false; return true; };
+  const archers = [];
+  const fits = (type, c) => {
+    if (type === 'dragon') return true;
+    if (nearGap(c) || at(c, gTop[c] - 1) || at(c + 1, gTop[c] - 1)) return false;
+    if (type === 'dino') return !at(c, gTop[c] - 2) && !at(c + 1, gTop[c] - 2);
+    if (type === 'hedgehog') return flat(c, 2) && Math.abs(c - Math.floor(cp)) > 6 && c > 26 && archers.every(a => Math.abs(a - c) > 12);
+    return true; };
+  const make = (e, type) => { const c = Math.floor(e.x/TS), K = ENEMY_KIND[type]; e.type = type; e.fly = type === 'dragon'; e.mix = true;
+    e.y = e.fly ? (gTop[c] - 3)*TS : gTop[c]*TS - K.h; if (type === 'hedgehog') archers.push(c); };
+  picks.forEach((i, k) => { const e = enemies[i], c = Math.floor(e.x/TS);
+    const tries = [pool[k % pool.length], ...pool.filter(t => t !== pool[k % pool.length])], type = tries.find(t => fits(t, c)); if (type) make(e, type); });
+  // make sure every type of this stage's pool shows up at least once (if the layout has a spot for it)
+  for (const type of pool) if (!enemies.some(e => e.type === type)){ const e = order.map(i => enemies[i]).find(e => !e.mix && fits(type, Math.floor(e.x/TS))); if (e) make(e, type); }
+  for (const e of enemies) delete e.mix;
 }
 function genBoss(){
   const w = 16, map = new Uint8Array(w*ROWS);
@@ -247,7 +286,7 @@ function brass(m, t0, dur, vol, bend = .94){ const c = ac(); if (!c) return; con
   for (const [type, mul] of [['sawtooth', 1], ['square', 1.006]]){ const o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(f*mul*bend, t); o.frequency.exponentialRampToValueAtTime(f*mul, t + .08); o.connect(lp); o.start(t); o.stop(t + dur + .02); } }
 const SHOOT = {
   sax:()=>blip('sawtooth', 494, 440, .12, .16), trumpet:()=>blip('square', 784, 740, .1, .14), flute:()=>blip('sine', 1175, 1245, .12, .3),
-  clarinet:()=>blip('square', 587, 554, .12, .12), trombone:()=>blip('sawtooth', 220, 330, .16, .18), drums:()=>noise(.08, .35, 0, 1500),
+  clarinet:()=>blip('square', 587, 554, .12, .12), trombone:()=>blip('sawtooth', 220, 330, .16, .18), euphonium:()=>brass(58, 0, .15, .16, .95),
 };
 const SFX = {
   jump:()=>blip('square', 260, 620, .14, .14), coin:()=>{ blip('triangle', 1047, 1047, .06, .3); blip('triangle', 1568, 1568, .14, .3, .05); },
@@ -258,6 +297,7 @@ const SFX = {
   bwaamp:()=>{ brass(34, 0, .75, .5, .89); brass(41, .01, .7, .28, .89); blip('sine', 110, 32, .55, .6); noise(.35, .32, 0, 60); },
   tubaFire:()=>{ brass(46, 0, .13, .3, .8); noise(.06, .12, 0, 2500); }, crate:()=>{ noise(.16, .3, 0, 500); blip('square', 190, 80, .12, .14); },
   fanfare:()=>{ [[58,0,.11],[58,.12,.11],[65,.24,.11],[70,.36,.5]].forEach(([m,t,d])=>brass(m, t, d, .2, .98)); brass(34, .36, .6, .35); [82,86,89,94].forEach((m,i)=>blip('triangle', mtof(m), mtof(m), .12, .18, .55 + i*.06)); },
+  windup:()=>{ blip('triangle', 520, 880, .18, .16); blip('triangle', 880, 880, .06, .12, .2); }, toss:()=>{ noise(.08, .14, 0, 2500); blip('square', 700, 420, .08, .08); },
   empty:()=>blip('square', 120, 100, .06, .12), pause:()=>blip('triangle', 880, 880, .08, .2), heart:()=>[76,79,84].forEach((m,i)=>blip('triangle', mtof(m), mtof(m), .1, .25, i*.07)),
 };
 function sfx(n, inst){ if (!sfxOn || !ac()) return; if (n === 'shoot') (SHOOT[inst] || SHOOT.sax)(); else SFX[n] && SFX[n](); }
@@ -327,16 +367,17 @@ const BOSS_CFG = {
 function newRun(opts){
   const th = themeOf(opts.world), boss = opts.level === 'boss';
   G = { opts, th, bg:backgrounds(th), tl:tiles(th), boss, coins:0, lives:opts.lives, maxHearts:3 + (opts.plume ? 1 : 0), chord:!!(opts.chord || opts.golden),
-        hero:SP.heroFrames(opts.inst, opts.skin, !!opts.golden), enemyType:(opts.world && opts.world.enemy) || 'gremlin', cpReached:false, t:0, paused:false, done:false, msg:null, shake:0,
+        hero:SP.heroFrames(opts.inst, opts.hair, !!opts.golden), enemyType:(opts.world && opts.world.enemy) || 'gremlin', cpReached:false, t:0, paused:false, done:false, msg:null, shake:0,
         tuba:clamp(opts.tuba | 0, 0, TUBA.ammo), tubaCool:0, tubaKO:0, bigShake:0 };
-  G.base = boss ? genBoss() : genLevel(opts.seed, opts.level, G.enemyType);
+  G.base = boss ? genBoss() : genLevel(opts.seed, opts.level, G.enemyType, Math.max(1, opts.worldNo | 0 || 1));
   resetLevel(true);
 }
 function resetLevel(first){
   const b = G.base;
   G.L = { w:b.w, map:b.map.slice(), gTop:b.gTop };
   G.coinList = b.coins.map(c => ({ ...c, taken:false }));
-  G.enemies = b.enemies.map(e => ({ ...e, w:14, h:14, vx:-28, vy:0, baseY:e.y, t:Math.random()*6, alive:true, dead:0, face:-1 }));
+  G.enemies = b.enemies.map(e => { const K = ENEMY_KIND[e.type] || {};
+    return { ...e, w:K.w || 14, h:K.h || 14, vx:-(K.speed || 28), vy:0, baseY:e.y, t:Math.random()*6, alive:true, dead:0, face:-1, hp:K.hp || 1, st:'idle', cool:ARCHER.first + Math.random(), dir:-1, hopT:.4 + Math.random()*.5 }; });
   G.shots = []; G.eshots = []; G.parts = []; G.bumps = []; G.pops = []; G.pickups = []; G.bombs = []; G.blasts = [];
   const sx = G.cpReached ? b.cpX : b.startX;
   G.p = { x:sx, y:(gTopAt(sx) - 2)*TS - 4, w:10, h:20, vx:0, vy:0, face:1, onGround:false, coyote:0, buffer:0, hearts:G.maxHearts, inv:first ? 0 : 1.5, cool:0, dead:0, anim:0, clear:0 };
@@ -403,14 +444,17 @@ function step(dt){
   for (const e of G.enemies){
     if (!e.alive){ e.dead -= dt; e.vy += 900*dt; e.y += e.vy*dt; continue; }
     if (Math.abs(e.x - p.x) > 300) continue;
-    e.t += dt;
-    if (e.fly){ moveX(e, e.vx*.8*dt); if (e.hitWall) e.vx = -e.vx; e.y = e.baseY + Math.sin(e.t*2.2)*14; if (Math.abs(e.x - (e.homeX ??= e.x)) > 64) e.vx = -Math.sign(e.x - e.homeX)*Math.abs(e.vx); }
+    e.t += dt; e.flash = Math.max(0, (e.flash || 0) - dt); const K = ENEMY_KIND[e.type] || {};
+    if (K.archer) updateArcher(e, dt, p);
+    else if (K.hop) updateHopper(e, dt, K);
+    else if (K.wave){ moveX(e, e.vx*dt); if (e.hitWall) e.vx = -e.vx; e.y = e.baseY + Math.sin(e.t*2.6)*16; if (Math.abs(e.x - (e.homeX ??= e.x)) > 80) e.vx = -Math.sign(e.x - e.homeX)*Math.abs(e.vx); }
+    else if (e.fly){ moveX(e, e.vx*.8*dt); if (e.hitWall) e.vx = -e.vx; e.y = e.baseY + Math.sin(e.t*2.2)*14; if (Math.abs(e.x - (e.homeX ??= e.x)) > 64) e.vx = -Math.sign(e.x - e.homeX)*Math.abs(e.vx); }
     else { e.vy = Math.min(400, e.vy + 1000*dt); moveX(e, e.vx*dt); if (e.hitWall) e.vx = -e.vx; moveY(e, e.vy*dt);
       if (Math.abs(e.x - (e.homeX ??= e.x)) > 48) e.vx = -Math.sign(e.x - e.homeX)*Math.abs(e.vx);
       if (e.onGround){ const fx = Math.floor((e.vx > 0 ? e.x + e.w + 1 : e.x - 1)/TS), fy = Math.floor((e.y + e.h + 2)/TS); if (!solid(fx, fy) && tileAt(fx, fy) !== 5) e.vx = -e.vx; }
       if (e.y > H + 40) e.alive = false; }
-    e.face = e.vx > 0 ? 1 : -1;
-    for (const s of G.shots) if (!s.dead && overlap({ x:s.x, y:s.y, w:6, h:6 }, e)){ s.dead = 1; kill(e); }
+    if (!K.archer && !K.hop) e.face = e.vx > 0 ? 1 : -1;
+    for (const s of G.shots) if (!s.dead && e.alive && overlap({ x:s.x, y:s.y, w:6, h:6 }, e)){ s.dead = 1; hitEnemy(e); }
     if (e.alive && !p.dead && overlap(p, e)){
       if (p.vy > 30 && p.y + p.h - e.y < 15){ kill(e, true); p.vy = input.jump ? -380 : -260; }
       else hurt('enemy:' + e.type); }
@@ -419,6 +463,8 @@ function step(dt){
   for (const s of G.eshots){ s.t += dt; if (s.grav) s.vy += s.grav*dt; s.x += s.vx*dt; s.y += s.vy*dt; s.rot = (s.rot || 0) + dt*12;
     if (s.y > H + 20 || s.x < -20 || s.x > G.L.w*TS + 20 || s.t > 6) s.dead = 1;
     if (s.kind === 'rock' && s.y > 12*TS - 8){ s.dead = 1; puff(s.x, s.y, '#9aa0b4', 6); G.shake = .1; }
+    if (s.kind === 'arrow'){ if (s.t > ARCHER.life || solid(Math.floor((s.x + Math.sign(s.vx)*6)/TS), Math.floor(s.y/TS))){ s.dead = 1; puff(s.x, s.y, '#e0a868', 4, 30); }
+      for (const n of G.shots) if (!s.dead && !n.dead && overlap({ x:n.x, y:n.y, w:6, h:6 }, { x:s.x - 7, y:s.y - 3, w:14, h:7 })){ n.dead = 1; s.dead = 1; sfx('bump'); puff(s.x, s.y, '#ffffff', 5, 40); } }
     if (s.kind === 'egg' && s.y > 12*TS - 8){ s.y = 12*TS - 8; s.vy = -s.vy*.5; if (Math.abs(s.vy) < 40){ s.dead = 1; puff(s.x, s.y, '#ffffff', 6); } }
     if (!s.dead && !p.dead && overlap(p, { x:s.x - 3, y:s.y - 3, w:6, h:6 })){ s.dead = 1; hurt('shot:' + s.kind); } }
   updateBombs(dt);
@@ -435,6 +481,27 @@ function shoot(){ const p = G.p, color = G.opts.golden ? '#ffe14a' : (SP.NOTE_CO
   const spreads = G.chord ? [-70, 0, 70] : [0]; for (const vy of spreads) G.shots.push({ x:ox, y:oy, vx:p.face*220, vy, t:0, color });
   p.cool = .22; sfx('shoot', G.opts.inst); }
 function addCoin(){ G.coins++; sfx('coin'); const tot = (G.opts.coinBase || 0) + G.coins; if (tot % 100 === 0){ G.lives = Math.min(99, G.lives + 1); G.opts.onLifeLost && G.opts.onLifeLost(G.lives); G.msg = { text:'1-UP!', t:1.4 }; sfx('power'); } }
+function hitEnemy(e){ if ((e.hp || 1) > 1){ e.hp--; e.flash = .3; sfx('bump'); puff(e.x + e.w/2, e.y + 4, '#ffffff', 4, 40); return; } kill(e); }
+function updateHopper(e, dt, K){ // Meep: sits a moment, then hops (never hops off a ledge or far from home)
+  e.vy = Math.min(400, e.vy + 1000*dt);
+  if (e.onGround){ e.vx = 0; e.hopT -= dt;
+    if (e.hopT <= 0){ let d = e.dir || -1; const home = (e.homeX ??= e.x);
+      const bad = dd => { const ax = Math.floor((e.x + e.w/2 + dd*30)/TS), fy = Math.floor((e.y + e.h + 2)/TS); return Math.abs(e.x + dd*22 - home) > 44 || !solid(ax, fy) || solid(ax, fy - 1); };
+      if (bad(d)) d = -d; if (!bad(d)){ e.dir = d; e.vx = d*K.speed; } e.vy = -250; e.hopT = .55 + Math.random()*.45; } }
+  moveX(e, e.vx*dt); if (e.hitWall){ e.vx = -e.vx; e.dir = -e.dir; } moveY(e, e.vy*dt); e.face = e.dir;
+  if (e.y > H + 40) e.alive = false; }
+function updateArcher(e, dt, p){ // hedgehog: shuffle -> wind-up ("!", quills up) -> throw one slow arrow -> long cooldown
+  const A = ARCHER, dx = (p.x + p.w/2) - (e.x + e.w/2), dy = (e.y + e.h) - (p.y + p.h);
+  e.vy = Math.min(400, e.vy + 1000*dt); moveY(e, e.vy*dt); if (e.y > H + 40){ e.alive = false; return; }
+  if (e.st === 'idle'){ const home = (e.homeX ??= e.x); moveX(e, e.vx*dt);
+    const fx = Math.floor((e.vx > 0 ? e.x + e.w + 1 : e.x - 1)/TS), fy = Math.floor((e.y + e.h + 2)/TS);
+    if (e.hitWall || Math.abs(e.x - home) > 12 || (e.onGround && !solid(fx, fy))) e.vx = -Math.sign(e.x - home || e.vx)*Math.abs(e.vx);
+    e.face = Math.abs(dx) < A.range ? (Math.sign(dx) || -1) : (e.vx > 0 ? 1 : -1); e.cool -= dt;
+    if (e.cool <= 0 && e.onGround && !p.dead && !p.clear && Math.abs(dx) < A.range && Math.abs(dx) > A.min && dy >= -8 && dy < A.rise && !G.eshots.some(s => s.from === e)){
+      e.st = 'wind'; e.stT = A.wind; e.face = Math.sign(dx) || -1; sfx('windup'); } }
+  else if (e.st === 'wind'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'throw'; e.stT = .35; sfx('toss');
+      G.eshots.push({ kind:'arrow', x:e.x + e.w/2 + e.face*10, y:e.y + 3, vx:e.face*A.speed, vy:0, t:0, from:e }); } }
+  else if (e.st === 'throw'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'idle'; e.cool = A.cool + Math.random()*.6; } } }
 function kill(e, stomp){ e.alive = false; e.dead = 1; e.vy = -200; sfx('stomp'); puff(e.x + 7, e.y + 7, '#ffffff', 6); G.coins += 0; }
 function bonk(tx, ty){ const v = tileAt(tx, ty); G.bumps.push({ tx, ty, t:0 });
   if (v === 3){ G.L.map[ty*G.L.w + tx] = 4; const lucky = (hash(tx + ':' + ty) % 7 === 0) && G.p.hearts < G.maxHearts;
@@ -443,7 +510,7 @@ function bonk(tx, ty){ const v = tileAt(tx, ty); G.bumps.push({ tx, ty, t:0 });
   else if (v === 8){ G.L.map[ty*G.L.w + tx] = 4; const dir = tileAt(tx + 1, ty - 1) || tileAt(tx + 1, ty) === 6 ? -1 : 1;
     G.pickups.push({ kind:'tuba', x:tx*TS + 8, y:(ty - 1)*TS + 4, vx:dir*36, vy:0, t:0, home:{ x:tx*TS + 8, y:(ty - 1)*TS + 4 } }); sfx('power'); puff(tx*TS + 8, ty*TS, '#fff3a0', 10, 80); }
   else sfx('bump');
-  for (const e of G.enemies) if (e.alive && Math.abs(e.x + 7 - (tx*TS + 8)) < 14 && Math.abs(e.y + e.h - ty*TS) < 4) kill(e); }
+  for (const e of G.enemies) if (e.alive && Math.abs(e.x + e.w/2 - (tx*TS + 8)) < 7 + e.w/2 && Math.abs(e.y + e.h - ty*TS) < 4) kill(e); }
 // ---------- GIANT TUBA ----------
 function tubaPickup(pk, dt){ // rises out of the block, then drifts sideways and floats down until it rests on the ground
   const p = G.p; pk.t += dt;
@@ -471,7 +538,8 @@ function updateBombs(dt){
   for (const q of G.blasts) q.t += dt; G.blasts = G.blasts.filter(q => q.t < .9); }
 function blast(cx, cy){ const R = TUBA.radius; let ko = 0; sfx('bwaamp'); G.shake = .4; G.bigShake = .3; G.blasts.push({ x:cx, y:cy, t:0 });
   for (let i = 0; i < 26; i++) puff(cx, cy, ['#fff3a0','#ffd23f','#ff8c42','#ffffff','#1a1030'][i%5], 1, 170);
-  for (const e of G.enemies) if (e.alive && Math.hypot(e.x + 7 - cx, e.y + 7 - cy) < R + 8){ kill(e); ko++; }
+  for (const e of G.enemies) if (e.alive && Math.hypot(e.x + e.w/2 - cx, e.y + e.h/2 - cy) < R + 8){ kill(e); ko++; }
+  for (const s of G.eshots) if (s.kind === 'arrow' && Math.hypot(s.x - cx, s.y - cy) < R + 8) s.dead = 1;
   const B = G.B; if (B && !B.gone && B.state !== 'intro' && !B.ghost){ const nx = clamp(cx, B.x, B.x + B.w), ny = clamp(cy, B.y, B.y + B.h);
     if (Math.hypot(nx - cx, ny - cy) < R){ damageBoss(TUBA.bossDmg, true); ko++; } }
   const w = G.L.w, tmin = Math.floor((cx - R)/TS), tmax = Math.floor((cx + R)/TS);
@@ -555,10 +623,16 @@ function draw(){
       glow(x, px, py + 7, 14); x.drawImage(tu, px - 7, py - 1); twinkle(x, px, py + 7, 14); continue; }
     const h = SP.item(pk.kind === 'chord' ? 'chord' : 'heart'); x.drawImage(h, Math.round(pk.x - cam - 3), Math.round(pk.y)); }
   // enemies
-  for (const e of G.enemies){ const fr = SP.enemyFrames(e.type)[Math.floor(e.t*6) % 2], img = e.face > 0 ? fr.l : fr.r;
-    if (e.x - cam < -32 || e.x - cam > W + 32) continue;
-    if (!e.alive){ x.save(); x.translate(Math.round(e.x - cam + 8), Math.round(e.y + 8)); x.scale(1, -1); x.drawImage(img, -8, -8); x.restore(); }
-    else x.drawImage(img, Math.round(e.x - cam - (img.width - 14)/2), Math.round(e.y + e.h - img.height)); }
+  for (const e of G.enemies){ if (e.x - cam < -32 || e.x - cam > W + 32) continue;
+    let fi = Math.floor(e.t*6) % 2;
+    if (e.type === 'hedgehog') fi = e.st === 'wind' ? 2 : e.st === 'throw' ? 3 : Math.floor(e.t*4) % 2;
+    else if (e.type === 'meep') fi = e.onGround || !e.alive ? 0 : 1; else if (e.type === 'dragon') fi = Math.floor(e.t*5) % 2;
+    const fr = SP.enemyFrames(e.type)[fi], img = e.face > 0 ? fr.l : fr.r;
+    if (!e.alive){ x.save(); x.translate(Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h/2)); x.scale(1, -1); x.drawImage(img, -Math.round(img.width/2), -Math.round(img.height/2)); x.restore(); continue; }
+    if (e.flash > 0 && Math.floor(G.t*30) % 2) continue;
+    const shake = e.st === 'wind' ? (Math.floor(G.t*30) % 2 ? 1 : -1) : 0, ex = Math.round(e.x - cam - (img.width - e.w)/2) + shake;
+    x.drawImage(img, ex, Math.round(e.y + e.h - img.height));
+    if (e.st === 'wind') alertBubble(x, Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h - img.height) - 4, e.stT); }
   // boss
   if (G.B && (!G.B.gone || G.B.gone > 1)){ const B = G.B, f = SP.bossFrames(B.key); const img = B.inv > 0 && Math.floor(G.t*30) % 2 ? f.hit : (B.face > 0 ? f.r : f.l);
     x.globalAlpha = B.ghost ? .35 + Math.sin(G.t*30)*.15 : 1; const bob = B.cfg.move === 'fly' || B.cfg.move === 'hover' || B.cfg.move === 'dance' ? Math.round(Math.sin(G.t*6)*2) : 0;
@@ -570,6 +644,10 @@ function draw(){
       case 'egg': x.fillStyle = '#1a1030'; x.fillRect(sx - 4, sy - 5, 8, 10); x.fillStyle = '#ffffff'; x.fillRect(sx - 3, sy - 4, 6, 8); break;
       case 'axe': { const fl = Math.floor(s.rot) % 2; x.fillStyle = '#5a3412'; fl ? x.fillRect(sx - 5, sy - 1, 10, 2) : x.fillRect(sx - 1, sy - 5, 2, 10); x.fillStyle = '#d0d4e4'; fl ? x.fillRect(sx + 2, sy - 4, 4, 8) : x.fillRect(sx - 4, sy - 6, 8, 4); break; }
       case 'fire': x.fillStyle = '#ff4f1f'; x.fillRect(sx - 4, sy - 4, 8, 8); x.fillStyle = '#ffd23f'; x.fillRect(sx - 2, sy - 2, 4, 4); break;
+      case 'arrow': { const d = s.vx > 0 ? 1 : -1, tip = sx + d*6, tail = sx - d*6;   // toy arrow: pink rubber tip, wooden shaft, blue feathers
+        x.fillStyle = '#1a1030'; x.fillRect(sx - 6, sy - 1, 13, 3); x.fillStyle = '#e0a868'; x.fillRect(sx - 5, sy, 11, 1);
+        x.fillStyle = '#1a1030'; x.fillRect(tip - 2, sy - 3, 5, 7); x.fillStyle = '#ff4f79'; x.fillRect(tip - 1, sy - 2, 3, 5); x.fillStyle = '#ffc0d8'; x.fillRect(tip - (d > 0 ? 0 : -1), sy - 2, 1, 2);
+        x.fillStyle = '#3a6ee8'; x.fillRect(tail - 2, sy - 3, 4, 2); x.fillRect(tail - 2, sy + 2, 4, 2); x.fillStyle = '#7cc0ff'; x.fillRect(tail - 1, sy - 3, 2, 1); break; }
       case 'orb': x.fillStyle = '#9b5de5'; x.fillRect(sx - 3, sy - 3, 6, 6); x.fillStyle = '#ffffff'; x.fillRect(sx - 1, sy - 2, 2, 2); break;
       default: x.fillStyle = '#1a1030'; x.fillRect(sx - 5, sy - 5, 10, 10); x.fillStyle = '#9aa0b4'; x.fillRect(sx - 4, sy - 4, 8, 8); x.fillStyle = '#d0d4e4'; x.fillRect(sx - 3, sy - 3, 3, 2);
     } }
@@ -593,6 +671,10 @@ function draw(){
   weather(x, cam); x.restore();
   hud(x);
 }
+function alertBubble(x, cx, by, left){ // the hedgehog's warning: a white "!" bubble that blinks faster just before the throw
+  if (left < .25 && Math.floor(G.t*24) % 2) return; const bx = cx - 4, top = by - 11;
+  x.fillStyle = '#1a1030'; x.fillRect(bx - 1, top - 1, 10, 12); x.fillRect(cx - 1, top + 11, 3, 2); x.fillStyle = '#ffffff'; x.fillRect(bx, top, 8, 10); x.fillRect(cx, top + 10, 1, 2);
+  x.fillStyle = '#e83a4a'; x.fillRect(cx - 1, top + 2, 2, 4); x.fillRect(cx - 1, top + 7, 2, 2); }
 function glow(x, cx, cy, r){ const a = .22 + Math.sin(G.t*5)*.1; x.globalAlpha = a; x.fillStyle = '#fff3a0';
   for (let i = 0; i < r; i++){ const hw = Math.round(Math.sqrt(r*r - i*i)); x.fillRect(cx - hw, cy - i, hw*2, 1); x.fillRect(cx - hw, cy + i, hw*2, 1); } x.globalAlpha = 1; }
 function twinkle(x, cx, cy, r){ for (let i = 0; i < 4; i++){ const ph = G.t*4 + i*1.57; if (Math.sin(ph*1.7) < .2) continue;
@@ -701,7 +783,7 @@ function drawOverworld(canvas, worlds, opts = {}){
       R(-11, -6, 22, 16, '#1a1030'); R(-10, -5, 20, 14, '#ffd23f'); R(-2, -2, 4, 5, '#1a1030'); R(-1, 3, 2, 3, '#1a1030'); }
     hits.push({ id:w.id, x:cx - 58, y:cy - 42, w:116, h:76 });
   });
-  if (opts.hero){ const cur = Math.max(0, worlds.findIndex(w => w.id === opts.current)), f = SP.heroFrames(opts.hero.inst, opts.hero.skin), pp = pos[cur];
+  if (opts.hero){ const cur = Math.max(0, worlds.findIndex(w => w.id === opts.current)), f = SP.heroFrames(opts.hero.inst, opts.hero.hair), pp = pos[cur];
     x.drawImage(f.stand.r, pp.x - 44, pp.y - 6 + Math.round(Math.sin(t*4))); }
   return hits;
 }

@@ -170,12 +170,15 @@ textarea.txt{resize:vertical}
 .stage .why{font-size:12px;font-weight:700;margin-top:2px}
 .play-btn{min-height:48px;padding:8px 12px;font-family:var(--head);font-weight:400;font-size:18px;white-space:nowrap}
 .pick-title{font-size:28px}
-.inst-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
+.inst-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:10px 0}
 .inst{border:var(--b);border-radius:14px;background:#fff;box-shadow:3px 3px 0 var(--ink);padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:4px;font-weight:900;min-height:110px}
-.inst canvas{width:108px;height:78px;image-rendering:pixelated}
+.inst canvas{width:100%;max-width:108px;height:auto;aspect-ratio:36/26;image-rendering:pixelated}
+.inst span{font-size:15px;letter-spacing:-.2px;white-space:nowrap}
 .inst.sel{background:var(--yellow);outline:4px solid var(--pink);outline-offset:-7px}
-.chip.skin{width:52px;min-width:52px}
-.chip.skin.sel{outline:4px solid var(--pink);outline-offset:2px}
+.hair-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0}
+.hair{border:var(--b);border-radius:14px;background:#fff;box-shadow:3px 3px 0 var(--ink);padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;font-weight:900;font-size:16px;min-height:96px}
+.hair canvas{width:78px;height:72px;image-rendering:pixelated}
+.hair.sel{background:var(--yellow);outline:4px solid var(--pink);outline-offset:-7px}
 
 body.in-game{overflow:hidden}
 #game{position:fixed;inset:0;z-index:60;background:#0b0618;display:flex;flex-direction:column;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}

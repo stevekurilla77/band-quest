@@ -8,7 +8,8 @@ const PAL = {
   n:'#a8642a', N:'#5a3412', c:'#ff9ab0', O:'#ff8c42', l:'#7cc0ff', L:'#3d7fc4', v:'#9b5de5', V:'#5a2a9a',
   x:'#9aa0b4', X:'#4a4e66', t:'#ffe9a0', m:'#2e2e3e', z:'#f2f6ff'
 };
-const SKINS = [ ['#ffd9b8','#e8b48c'], ['#e8b07a','#c88a52'], ['#b8763f','#8f5629'], ['#7a4a26','#5a3418'] ];
+// one friendly skin tone for every hero (no skin-colour picker); hair style is the hero's look choice
+const HAIRS = ['short', 'long'];
 
 // hero: head + torso + legs (facing right)
 const HEAD = [
@@ -22,17 +23,21 @@ const LEGS = {
   jump: ["...kppkkppk", "..kppk..kpppk", "..kook....kook"],
 };
 const HERO = {}; for (const k in LEGS) HERO[k] = [...HEAD, ...TORSO, ...LEGS[k]];
+// long hair: flows out from under the band hat and down the hero's back (drawn BEHIND the body; H = highlight)
+const LONG_HAIR = [["....kkk", "..kkhhhk", ".khhHhhk", ".khhHhhk", "khhHhhhk", "khhHhhhk", "khhhHhhk", ".khhHhk", ".khhhhk", "..khhk", "...kk"], 0, 7];
+const HAIR_PAL = { H:'#7a4a22' };
 
 // instruments, drawn over the hero's hands: [rows, offsetX, offsetY]
 const INSTR = {
-  sax:      [["...yk", "..yk", "..yk", ".yyk", ".yyk", "yyyk", "yyyyk", ".yyyy", "..yy"], 9, 10],
-  trumpet:  [["..........y", "yyyyyyyyyyy", "...yYy....yy", "...yyy.....y"], 9, 10],
   flute:    [["xWWWWWWWWWWWWx", ".k.k.k.k.k"], 8, 10],
   clarinet: [["Xk", ".kX", ".kk", "..kX", "..kk", "..kkX", "...kk", "..kkkk", ".kkkkkk"], 9, 10],
+  sax:      [["...yk", "..yk", "..yk", ".yyk", ".yyk", "yyyk", "yyyyk", ".yyyy", "..yy"], 9, 10],
+  trumpet:  [["..........y", "yyyyyyyyyyy", "...yYy....yy", "...yyy.....y"], 9, 10],
   trombone: [["yyyyyyyyyyyyyyy", "y.............y", "yyyyyyyyyyyyyyy", "..yy", ".yyyy"], 8, 10],
-  drums:    [["n......n", ".n....n", "..n..n", "WWWWWWWWWW", "rrrrrrrrrr", "ryryryryry", "rrrrrrrrrr", "WWWWWWWWWW"], 3, 11],
+  // euphonium: silver bell pointing up beside the hero's head, three valves, mouthpipe to the lips
+  euphonium:[["....kkkkk", "...kWWWWWk", "....kxxxk", "....kxxxk", ".....kxxk", "kkk..kxxk", "..kkkxxxk", "...kxkxkxk", "...kXkXkXk", "...kxxxxxk", "....kxxxk", ".....kkk"], 10, 6],
 };
-const NOTE_COLORS = { sax:'#ffd23f', trumpet:'#ff8c42', flute:'#7cc0ff', clarinet:'#b8f35b', trombone:'#ff4f79', drums:'#ffffff' };
+const NOTE_COLORS = { flute:'#7cc0ff', clarinet:'#b8f35b', sax:'#ffd23f', trumpet:'#ff8c42', trombone:'#ff4f79', euphonium:'#c8b6ff' };
 
 // enemies (16x16-ish, 2 frames each)
 const EN = {
@@ -58,6 +63,55 @@ const EN = {
 ".......kkk", ".....kkvvvkk", "....kvvvvvvvk", "...kvvwkvvwkvk", "...kvvwkvvwkvk", "..kvvvvvvvvvvvk",
 "..kvvkvvvvvkvvk", "..kvvvkkkkkvvvk", "..kvvvvvvvvvvvk", "..kvvVvvvvvVvvk", "...kvvvvvvvvvk", "....kkkkkkkkk"], null],
     legs:[["....kVk...kVk"],["...kVk.....kVk"]] },
+};
+// "mix-in" enemies that show up in EVERY world alongside that world's own enemy. Full frames, drawn facing LEFT.
+const MIX = {
+  // Mr. Dinosaur: big friendly cartoon dino in a red bow tie (walks, takes 2 note hits)
+  dino: { pal:{ g:'#5fd068', G:'#2f8a3e', t:'#fff0b0', O:'#ff9a3c' }, f:[[
+"....kkkkkk..........", "...kggggggk..kk.....", "..kggggggggkkOOk....", ".kggwwkgggggkOOk....", ".kggwkkggggggkk.....",
+"kggggggggggggk.kk...", "kgkgggggggggggkOOk..", "kggggggggggggggkk...", ".kcggggggggggggk....", "..kkkkkkgggggggk....",
+"...krkkkrkggggggk...", "...krrkrrkgggggggk..", "...krkkkrkggggggggkk", "..kgktttttggggggggGk", "...kttttttgggggggkk.",
+"....kttttgggggggk...", ".....kkkkkkkkkkk....", ".....kGGk...kGGk....", "....kkkk...kkkk....."
+  ],[
+"....kkkkkk..........", "...kggggggk..kk.....", "..kggggggggkkOOk....", ".kggwwkgggggkOOk....", ".kggwkkggggggkk.....",
+"kggggggggggggk.kk...", "kgkgggggggggggkOOk..", "kggggggggggggggkk...", ".kcggggggggggggk....", "..kkkkkkgggggggk....",
+"...krkkkrkggggggk...", "...krrkrrkgggggggkk.", "...krkkkrkggggggggGk", "..kgktttttgggggggkk.", "...kttttttgggggggk..",
+"....kttttgggggggk...", ".....kkkkkkkkkkk....", "......kGGk.kGGk.....", ".....kkkk.kkkk......"
+  ]] },
+  // Meep the green alien: one big eye, antenna, hops around
+  meep: { pal:{ g:'#8ef05a', G:'#3a9a2e', c:'#ffb0c8' }, f:[[
+"......kk......", ".....kyyk.....", "......kk......", "......kG......", "....kkkkkk....", "...kggggggk...",
+"..kggwwwwggk..", ".kggwwkkwwggk.", ".kggwwkkwwggk.", ".kgggwwwwgggk.", ".kcggggggggck.", ".kggkggggkggk.",
+"..kggkkkkggk..", "...kggggggk...", "....kkkkkk....", "...kGk..kGk...", "..kkkk..kkkk.."
+  ],[
+".....kk.......", "....kyyk......", ".....kk.......", "......kG......", "....kkkkkk....", "...kggggggk...",
+"..kggwwwwggk..", ".kggwwkkwwggk.", ".kggwwkkwwggk.", ".kgggwwwwgggk.", ".kcggggggggck.", ".kgggkkkkgggk.",
+"..kggkwwkggk..", "...kggggggk...", "....kkkkkk....", "....kGkkGk....", "....kk..kk...."
+  ]] },
+  // Sparky, a cute little dragon: flaps along in a wave
+  dragon: { pal:{ O:'#ff8c42', t:'#ffe9a0', c:'#ff6fa0', C:'#c23a6a' }, f:[[
+"..........kk.kk...", ".........kcckcck..", "...k.k...kccccck..", "..kOkOk...kcccck...", ".kOOOOOk...kcck....",
+"kOwkOOOOk..kkk.....", "kOkkOOOOOkkOOk.....", "kOOOOOOOOOOOOOk....", ".kcOOOtttOOOOOOkk..", "..kkkOtttttOOOOOOk.",
+"....kOttttOOkkOOOk", ".....kOOOOOk..kkk.", ".....kOk.kOk......", "......k...k......."
+  ],[
+"..................", "..................", "...k.k............", "..kOkOk...........", ".kOOOOOk..........",
+"kOwkOOOOk..kkk.....", "kOkkOOOOOkkOOk.....", "kOOOOOOOOOOOOOk....", ".kcOOOtttOOccccckk.", "..kkkOtttttkcccccck",
+"....kOttttOOkkccck", ".....kOOOOOk..kkk.", ".....kOk.kOk......", "......k...k......."
+  ]] },
+  // Hedgehog archer: frames 0-1 shuffle, 2 = wind-up (quills up, arm back), 3 = throw (arm forward)
+  hedgehog: { pal:{ n:'#a8642a', N:'#5a3412', t:'#ffd9a0', c:'#ff9ab0', y:'#ffd23f' }, f:[[
+"......k.k.k.k...", ".....knknknknk..", "....knNnNnNnNnk.", "...kttkNnNnNnNnk", "..kttktkNnNnNnNk", ".kktttttkNnNnNnk",
+"kkttctttttkNnNnk", ".kttttttttkNnNk.", "..kkttttttkkkk..", "...kk.kk..kk.kk."
+  ],[
+"......k.k.k.k...", ".....knknknknk..", "....knNnNnNnNnk.", "...kttkNnNnNnNnk", "..kttktkNnNnNnNk", ".kktttttkNnNnNnk",
+"kkttctttttkNnNnk", ".kttttttttkNnNk.", "..kkttttttkkkk..", "....kk.kk.kk.kk."
+  ],[
+"..ky.ky.ky.ky...", "...kykykykykyk..", "....knNnNnNnNnk.", "...kttkNnNnNnNnk", "..kttwtkNnNnNnNk", ".kktttttkNnNnNnk",
+"kkttctttttkttkNk", ".kttttttttktkNk.", "..kkttttttkkkk..", "...kk.kk..kk.kk."
+  ],[
+"......k.k.k.k...", ".....knknknknk..", "....knNnNnNnNnk.", "...kttkNnNnNnNnk", "..kttktkNnNnNnNk", "kkktttttkNnNnNnk",
+"ttkkctttttkNnNnk", ".kttttttttkNnNk.", "..kkttttttkkkk..", "...kk.kk..kk.kk."
+  ]] },
 };
 // bosses: left halves (16 wide), mirrored to 32 wide
 const BOSS = {
@@ -147,17 +201,23 @@ function tint(c, color){ const t = document.createElement('canvas'); t.width = c
 
 const cache = {};
 const GOLD = { y:'#ffe14a', Y:'#b07800', W:'#fff3a0', x:'#ffd23f', X:'#b07800', k:'#8a5a00', n:'#d9a520', r:'#ffd23f' };  // golden-instrument reward
-function heroFrames(inst = 'sax', skin = 0, gold = false){
-  const key = `hero-${inst}-${skin}-${gold ? 'g' : ''}`; if (cache[key]) return cache[key];
-  const sk = SKINS[skin] || SKINS[0], pal = { s:sk[0], S:sk[1] };
-  const [ir, ix, iy] = INSTR[inst] || INSTR.sax, ic = render(ir, gold ? { ...pal, ...GOLD } : pal);
+function heroFrames(inst = 'sax', hair = 'short', gold = false){
+  if (!INSTR[inst]) inst = 'sax'; if (hair !== 'long') hair = 'short';
+  const key = `hero-${inst}-${hair}-${gold ? 'g' : ''}`; if (cache[key]) return cache[key];
+  const pal = {};
+  const [ir, ix, iy] = INSTR[inst], ic = render(ir, gold ? { ...pal, ...GOLD } : pal);
+  const hairImg = hair === 'long' ? render(LONG_HAIR[0], HAIR_PAL) : null;
   const out = {};
-  for (const k in HERO){ const r = composite(render(HERO[k], pal), ic, ix, iy); out[k] = { r, l:flip(r), hurt:tint(r,'#ffffff') }; }
+  for (const k in HERO){ let body = render(HERO[k], pal);
+    if (hairImg){ const c = document.createElement('canvas'); c.width = body.width; c.height = body.height; const x = c.getContext('2d'); x.drawImage(hairImg, LONG_HAIR[1], LONG_HAIR[2]); x.drawImage(body, 0, 0); body = c; }
+    const r = composite(body, ic, ix, iy); out[k] = { r, l:flip(r), hurt:tint(r,'#ffffff') }; }
   out.hurt = tint(out.stand.r, '#ffffff');
   return cache[key] = out;
 }
 function enemyFrames(type){
   const key = 'en-'+type; if (cache[key]) return cache[key];
+  const m = MIX[type];
+  if (m) return cache[key] = m.f.map(rows => { const c = render(rows, m.pal); return { r:c, l:flip(c) }; });
   const d = EN[type] || EN.gremlin, frames = [];
   for (let i = 0; i < 2; i++){ const body = d.f[0], legs = d.legs ? d.legs[i] : []; const c = render([...body, ...legs], d.pal);
     frames.push({ r:c, l:flip(c) }); }
@@ -188,6 +248,6 @@ function text(ctx, str, x, y, color = '#fff', shadow = '#1a1030', scale = 1){
 }
 const textWidth = (s, scale = 1) => String(s).length * 6 * scale - scale;
 
-window.PQSprites = { PAL, SKINS, INSTR:Object.keys(INSTR), NOTE_COLORS, ENEMIES:Object.keys(EN), BOSSES:Object.keys(BOSS),
+window.PQSprites = { PAL, HAIRS, INSTR:Object.keys(INSTR), NOTE_COLORS, ENEMIES:Object.keys(EN), MIX_ENEMIES:Object.keys(MIX), BOSSES:Object.keys(BOSS),
   heroFrames, enemyFrames, bossFrames, item, noteShot, text, textWidth, render };
 })();
