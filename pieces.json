@@ -1,0 +1,112 @@
+{
+  "settings": {
+    "teacherPin": "1234"
+  },
+  "pieces": [
+    {
+      "id": "valkyrie",
+      "title": "Valkyrie",
+      "composer": "Matt Neufeld",
+      "publisher": "Randall Standridge Music",
+      "boss": "Skadi the Storm Valkyrie",
+      "bossEmoji": "🛡️",
+      "color": "#7cc0ff",
+      "blurb": "Winged warrior of the Norse skies. Battle cries, whispered Icelandic, rustling-paper wings — only a brave band hero can ground her.",
+      "youtube": "https://www.youtube.com/watch?v=I06QpzDI4GI",
+      "channel": "Randall Standridge (official)",
+      "badge": {
+        "name": "Valhalla Bound",
+        "emoji": "🪽"
+      },
+      "world": {
+        "theme": "snow",
+        "enemy": "imp",
+        "boss": "valkyrie"
+      }
+    },
+    {
+      "id": "chickens",
+      "title": "Attack of the Rubber Chickens",
+      "composer": "Randall D. Standridge",
+      "publisher": "Randall Standridge Music",
+      "boss": "Admiral Cluckzilla & the Squeak Fleet",
+      "bossEmoji": "🐔",
+      "color": "#ffe066",
+      "blurb": "Rubber chickens from outer space, armed with squeaks, honks and questionable intentions. Keep your eyes on the skies!",
+      "youtube": "https://www.youtube.com/watch?v=Nte9s-HGh6A",
+      "channel": "Randall Standridge (official)",
+      "badge": {
+        "name": "Chicken Slayer",
+        "emoji": "🐔"
+      },
+      "world": {
+        "theme": "farm",
+        "enemy": "chicken",
+        "boss": "cluckzilla"
+      }
+    },
+    {
+      "id": "santa",
+      "title": "Son of Santa the Barbarian",
+      "composer": "Randall D. Standridge",
+      "publisher": "Randall Standridge Music",
+      "boss": "Santa the Barbarian",
+      "bossEmoji": "🎅",
+      "color": "#ff8a8a",
+      "blurb": "After the Snowpocalypse, the not-so-jolly old elf battles his own son for Christmas. Major vs. minor — ho! ho! who will win?",
+      "youtube": "https://www.youtube.com/watch?v=iFRhBzkUYz0",
+      "channel": "Randall Standridge (official, live recording)",
+      "badge": {
+        "name": "Barbarian Tamer",
+        "emoji": "🪓"
+      },
+      "world": {
+        "theme": "candy",
+        "enemy": "ginger",
+        "boss": "santa"
+      }
+    },
+    {
+      "id": "infinite",
+      "title": "Infinite Quest",
+      "composer": "Todd Stalter",
+      "publisher": "Alfred Music",
+      "boss": "The Déjà Vu Dragon",
+      "bossEmoji": "🐉",
+      "color": "#9ff0c8",
+      "blurb": "Strange mysteries, the danger of the unknown… haven’t you fought this dragon before? Déjà vu!",
+      "youtube": "https://www.youtube.com/watch?v=0dL4TGaJf7o",
+      "channel": "Alfred Music Concert Band (official)",
+      "badge": {
+        "name": "Dragon Slayer",
+        "emoji": "🐉"
+      },
+      "world": {
+        "theme": "castle",
+        "enemy": "wisp",
+        "boss": "dragon"
+      }
+    },
+    {
+      "id": "ghosts",
+      "title": "Ghosts: A Midnight Tango",
+      "composer": "Gene Milford",
+      "publisher": "Wingert-Jones Publications",
+      "boss": "Señor Spectro, the Tango Phantom",
+      "bossEmoji": "👻",
+      "color": "#c9b6ff",
+      "blurb": "Rattling bones, clanking chains and groans after midnight. The spirits are dancing a tango — out-dance them!",
+      "youtube": "https://www.youtube.com/watch?v=PxVQvyM2VtQ",
+      "channel": "Wingert-Jones Publications (official)",
+      "badge": {
+        "name": "Ghostbuster",
+        "emoji": "👻"
+      },
+      "world": {
+        "theme": "haunted",
+        "enemy": "ghost",
+        "boss": "spectro"
+      }
+    }
+  ]
+}

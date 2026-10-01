@@ -1,0 +1,17 @@
+{
+  "name": "Band Quest — Band Hero Platformer",
+  "short_name": "Band Quest",
+  "description": "A 16-bit-style band-hero platformer: one world and one boss for every concert piece.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2a1257",
+  "theme_color": "#2a1257",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

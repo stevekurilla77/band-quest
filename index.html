@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Band Quest 🎺 Band Hero Platformer</title>
+<meta name="description" content="A 16-bit-style band-hero platformer: one world and one boss for every concert piece.">
+<meta name="theme-color" content="#2a1257">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Band Quest">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== Onboarding ===== -->
+  <section id="screen-welcome" class="screen" hidden>
+    <div class="welcome">
+      <div class="logo-badge" aria-hidden="true">⚔️🎺</div>
+      <h1 class="title">Band<br>Quest</h1>
+      <p class="tag">A band-hero platformer. Five worlds. Five bosses. Grab your instrument!</p>
+      <form id="welcome-form" class="card" autocomplete="off">
+        <label for="nick" class="lbl">What should we call you?</label>
+        <input id="nick" name="nick" maxlength="16" placeholder="Nickname or first name" required
+               autocapitalize="words" spellcheck="false" enterkeyhint="go">
+        <p class="hint">🔒 First name or nickname only — <b>no last names</b>. Everything stays on this phone. No accounts, nothing is sent anywhere.</p>
+        <button class="btn btn-big btn-yellow" type="submit">Press START ➜</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===== Teacher (open with ?teacher) ===== -->
+  <section id="screen-teacher" class="screen" hidden>
+    <h1 class="section-title">🧑‍🏫 Teacher Tools</h1>
+    <form id="t-pin-form" class="card" autocomplete="off">
+      <label class="lbl" for="t-pin">Teacher PIN</label>
+      <input id="t-pin" type="password" inputmode="numeric" maxlength="12" class="txt" placeholder="••••">
+      <button class="btn btn-big btn-yellow" type="submit" style="margin-top:12px">Unlock 🔓</button>
+      <p id="t-pin-err" class="err" hidden>Wrong PIN.</p>
+      <a class="btn-link" href="./">← Back to the game</a>
+    </form>
+    <div id="t-editor" hidden>
+      <div class="card">
+        <p class="hint big">Edit the piece list here, then <b>download the new <code>pieces.json</code></b> and redeploy it. Nothing changes for students until the new file is deployed — there’s no server.</p>
+        <p id="t-draft-note" class="hint" hidden>🧪 This phone is currently previewing a draft.</p>
+      </div>
+      <h2 class="section-title small">🎼 Worlds (one per piece, played in this order)</h2>
+      <ul id="t-list" class="history"></ul>
+      <form id="t-form" class="card t-form" autocomplete="off">
+        <h3 id="t-form-title">➕ Add a piece</h3>
+        <label class="lbl">Title *<input class="txt" name="title" required maxlength="80" placeholder="e.g. Dragon Fire"></label>
+        <label class="lbl">Composer *<input class="txt" name="composer" required maxlength="60"></label>
+        <label class="lbl">Publisher<input class="txt" name="publisher" maxlength="60"></label>
+        <label class="lbl">Boss name *<input class="txt" name="boss" required maxlength="60" placeholder="e.g. Ember the Volcano Dragon"></label>
+        <div class="t-row">
+          <label class="lbl">Boss emoji *<input class="txt" name="bossEmoji" required maxlength="8" placeholder="🐉"></label>
+          <label class="lbl">Theme color<input class="txt color" type="color" name="color" value="#ffd23f"></label>
+        </div>
+        <label class="lbl">Boss story / theme<textarea class="txt" name="blurb" rows="3" maxlength="240" placeholder="One or two fun sentences about the boss."></textarea></label>
+        <label class="lbl">YouTube link (official/publisher recording)<input class="txt" name="youtube" inputmode="url" placeholder="https://www.youtube.com/watch?v=..."></label>
+        <p id="t-yt-note" class="hint"></p>
+        <label class="lbl">YouTube channel name<input class="txt" name="channel" maxlength="60" placeholder="e.g. Alfred Music Concert Band (official)"></label>
+        <div class="lbl" style="margin-top:16px">🎮 Game world</div>
+        <div class="t-row">
+          <label class="lbl">World theme<select class="txt" name="wTheme" id="t-wtheme"></select></label>
+          <label class="lbl">Enemy<select class="txt" name="wEnemy" id="t-wenemy"></select></label>
+        </div>
+        <div class="t-row">
+          <label class="lbl">Boss sprite<select class="txt" name="wBoss" id="t-wboss"></select></label>
+          <label class="lbl">Sky color (optional)<input class="txt color" type="color" name="wSky" value="#000000"></label>
+        </div>
+        <label class="toggle"><input type="checkbox" name="wUseSky"> <span>Use my sky color instead of the theme’s</span></label>
+        <div class="t-row">
+          <label class="lbl">“Beat the boss” badge<input class="txt" name="badgeName" maxlength="24" placeholder="Dragon Slayer"></label>
+          <label class="lbl">Badge emoji<input class="txt" name="badgeEmoji" maxlength="8" placeholder="🏅"></label>
+        </div>
+        <button class="btn btn-big btn-pink" type="submit" id="t-save">Add piece ➕</button>
+        <button class="btn btn-link" type="button" id="t-cancel" hidden>Cancel edit</button>
+      </form>
+      <div class="card">
+        <h3>📦 Get the new pieces.json</h3>
+        <button class="btn btn-wide btn-yellow" id="t-download">⬇️ Download pieces.json</button>
+        <button class="btn btn-wide btn-ghost" id="t-share">📤 Share / email the file to myself</button>
+        <button class="btn btn-wide btn-ghost" id="t-copy">📋 Copy JSON text</button>
+        <button class="btn btn-wide btn-ghost" id="t-preview">🧪 Preview these pieces on this phone</button>
+        <button class="btn btn-wide btn-ghost" id="t-unpreview" hidden>✖ Stop preview (back to the live file)</button>
+        <label class="lbl">Teacher PIN in the new file<input class="txt" id="t-newpin" inputmode="numeric" maxlength="12"></label>
+        <button class="btn btn-wide btn-ghost danger" id="t-revert">↺ Discard my edits (reload live pieces.json)</button>
+        <textarea id="t-json" class="txt mono" rows="10" readonly></textarea>
+        <a class="btn-link" href="./">← Back to the game</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Main: the world map ===== -->
+  <header id="hud" class="hud" hidden>
+    <div class="hud-row">
+      <div class="hud-name"><span id="hud-avatar" class="avatar" title="Tap to change">🎷</span><div><div id="hud-nick" class="nick">Player</div><div id="hud-rank" class="rank">⭐ 0 cleared</div></div></div>
+      <div class="hud-chips">
+        <div class="hud-chip lives" title="Lives">❤️<span id="hud-lives">5</span></div>
+        <div class="hud-chip score" title="Note coins this game">🪙<span id="hud-score">0</span></div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" hidden>
+    <div class="map-head">
+      <button id="hero-btn" class="btn btn-ghost hero-btn">🎒 Hero</button>
+      <button id="badges-btn" class="btn btn-ghost hero-btn">🏆 Badges</button>
+      <button id="settings-btn" class="btn btn-ghost hero-btn" aria-label="settings">⚙️</button>
+    </div>
+    <div class="map-wrap"><canvas id="overworld" width="256" height="400" aria-label="World map: tap a world"></canvas></div>
+    <p class="energy-note">Tap a world to play. Clear 3 stages to open the 🏰 Boss Castle. Beat the boss to unlock the next world. Every 100 🪙 = 1-UP!</p>
+  </main>
+</div>
+
+<!-- Game screen -->
+<div id="game" hidden>
+  <div id="game-stage"><canvas id="game-canvas" width="256" height="224" aria-label="game"></canvas></div>
+  <div id="touch">
+    <div id="dpad" aria-label="move left or right"><span class="l">◀</span><span class="r">▶</span></div>
+    <div class="ab"><button id="btn-t" aria-label="giant tuba: fire a bass bomb"><canvas width="9" height="9"></canvas><small>T·<b>5</b></small></button><button id="btn-b" aria-label="shoot notes">♪<small>B</small></button><button id="btn-a" aria-label="jump">▲<small>A</small></button></div>
+  </div>
+  <button id="btn-pause" aria-label="pause">❚❚</button>
+  <div id="pause-menu" hidden><div class="card">
+    <h3>⏸ Paused</h3>
+    <button class="btn btn-big btn-yellow" id="pm-resume">▶ Resume</button>
+    <button class="btn btn-wide btn-ghost" id="pm-music">🎵 Music: on</button>
+    <button class="btn btn-wide btn-ghost danger" id="pm-quit">🚪 Quit to map</button>
+    <p class="hint">Keyboard: ← → move · Space/Z jump · X shoot · C tuba · Esc pause. Quitting doesn’t cost a life.</p>
+  </div></div>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <button class="modal-x" id="modal-x" aria-label="close">✕</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+<div id="fx" class="fx" aria-hidden="true"></div>
+
+<script src="sprites.js"></script>
+<script src="game.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
