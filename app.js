@@ -86,7 +86,9 @@ const fmtDate = k => { const [y,m,d] = k.split('-').map(Number); return new Date
 
 // ---------- UI sound blips (the game itself has its own chiptune engine) ----------
 let AC = null;
-function audio(){ if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; AC = new C(); } if (AC.state === 'suspended') AC.resume(); return AC; }
+function audio(){ if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; AC = new C(); }
+  if (AC.state !== 'running'){ try { const r = AC.resume(); if (r && r.catch) r.catch(() => {}); } catch(e){} } return AC; }   // iOS: also wake from 'interrupted'
+['touchend', 'click', 'keydown'].forEach(ev => addEventListener(ev, () => { if (AC && AC.state !== 'running') audio(); }, { capture:true, passive:true }));
 function tone(freq, t0, dur, type='square', vol=.2){
   const c = audio(); if (!c) return; const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + t0;
   o.type = type; o.frequency.setValueAtTime(freq, t); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t+.01); g.gain.exponentialRampToValueAtTime(.0001, t+dur);

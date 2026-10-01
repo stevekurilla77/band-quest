@@ -268,8 +268,18 @@ function genBoss(){
 
 // ---------- audio: chiptune SFX + tiny original music sequencer ----------
 let AC = null, master = null, musicGain = null;
-function ac(){ if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; AC = new C(); master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination); musicGain = AC.createGain(); musicGain.gain.value = .22; musicGain.connect(master); }
-  if (AC.state === 'suspended') AC.resume(); try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){} return AC; }
+// iPhone audio: iOS can leave the context 'suspended' or 'interrupted' (screen lock, app switch, a call, the YouTube player, an app update),
+// and it only wakes up from inside a real tap. So: wake it whenever it isn't 'running', and try again on EVERY tap/key (see unlockAudio).
+function ac(){
+  try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch(e){}   // play even with the ringer switch on silent
+  if (AC && AC.state === 'closed') AC = null;
+  if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; AC = new C(); master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination); musicGain = AC.createGain(); musicGain.gain.value = .22; musicGain.connect(master); }
+  if (AC.state !== 'running'){ try { const r = AC.resume(); if (r && r.catch) r.catch(() => {}); } catch(e){} }
+  return AC; }
+let audioPrimed = false;
+function unlockAudio(){ const c = ac(); if (!c) return;
+  if (!audioPrimed || c.state !== 'running'){ try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); audioPrimed = true; } catch(e){} } }   // a silent blip inside the gesture unlocks iOS
+['touchend', 'pointerup', 'click', 'keydown', 'pointerdown', 'touchstart'].forEach(ev => addEventListener(ev, unlockAudio, { capture:true, passive:true }));
 let sfxOn = true, musicOn = true;
 function blip(type, f0, f1, dur, vol = .3, t0 = 0, dest){ const c = ac(); if (!c) return; const t = c.currentTime + t0, o = c.createOscillator(), g = c.createGain();
   o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
@@ -309,7 +319,7 @@ const Music = {
     return { root:m.root, sc, prog, mel, bpm:boss ? m.bpm + 16 : m.bpm, tango:m.tango }; },
   start(th, boss){ this.stop(); if (!musicOn || !ac()) return; this.song = this.make(th, boss); this.next = AC.currentTime + .1; this.step = 0; this.timer = setInterval(() => this.tick(), 30); },
   stop(){ clearInterval(this.timer); this.timer = null; },
-  tick(){ const s = this.song, dt = 60/s.bpm/2;
+  tick(){ const s = this.song, dt = 60/s.bpm/2; if (this.next < AC.currentTime - .25) this.next = AC.currentTime + .05;   // after an audio interruption: no burst of late notes
     while (this.next < AC.currentTime + .15){ const i = this.step % 64, deg = s.prog[i >> 4], t0 = this.next - AC.currentTime, chordRoot = s.root - 24 + s.sc[deg];
       const bassHit = s.tango ? [1,0,0,1,0,1,1,0][i % 8] : (i % 2 === 0);
       if (bassHit) blip('triangle', mtof(chordRoot + (i % 4 === 2 ? 7 : 0)), mtof(chordRoot + (i % 4 === 2 ? 7 : 0)), dt*.9, .5, t0, musicGain);
@@ -789,5 +799,5 @@ function drawOverworld(canvas, worlds, opts = {}){
 }
 
 window.PQGame = { start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
-  debug:{ get G(){ return G; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } } } };
+  debug:{ get G(){ return G; }, get audio(){ return AC; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } } } };
 })();
