@@ -10,11 +10,13 @@ const PAL = {
 };
 // one friendly skin tone for every hero (no skin-colour picker); hair style is the hero's look choice
 const HAIRS = ['short', 'long'];
+// hero skin: a neutral warm medium tan (s), a darker shade (S) for the shadow under the hat brim + neck, and a rose-brown mouth (c)
+const HERO_PAL = { s:'#c68b59', S:'#a06a3e', c:'#8e4a3c' };
 
 // hero: head + torso + legs (facing right)
 const HEAD = [
 "......rr", ".....rrrr", "......rr", ".....kkkkk", "....kwwwwwk", "....kyyyyyk", "....kwwwwwk",
-"...kkkkkkkkkk", "....khhssssk", "....khsssesk", "....khssssssk", "....kkssscsk", ".....kksssk"];
+"...kkkkkkkkkk", "....khhSSSSk", "....khsssesk", "....khssssssk", "....kkssscsk", ".....kkSssk"];
 const TORSO = ["....kbbyybbk", "...kbbbyybbbk", "...kbbbyybbbsk", "...ksbbyybbbk", "....kBBBBBBk"];
 const LEGS = {
   stand:["....kppkkppk", "....kppkkppk", "...koookkoook"],
@@ -272,7 +274,7 @@ const GOLD = { y:'#ffe14a', Y:'#b07800', t:'#fff3a0', W:'#fff3a0', w:'#fffbe0', 
 function heroFrames(inst = 'sax', hair = 'short', gold = false){
   if (!INSTR[inst]) inst = 'sax'; if (hair !== 'long') hair = 'short';
   const key = `hero-${inst}-${hair}-${gold ? 'g' : ''}`; if (cache[key]) return cache[key];
-  const pal = {};
+  const pal = HERO_PAL;
   const [ir, ix, iy] = INSTR[inst], ic = render(ir, gold ? { ...pal, ...GOLD } : pal);
   const hairImg = hair === 'long' ? render(LONG_HAIR[0], HAIR_PAL) : null;
   const out = {};
