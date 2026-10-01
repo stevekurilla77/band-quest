@@ -284,19 +284,35 @@ const keyMap = { ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right'
 addEventListener('keydown', e => { if (!G) return; const k = keyMap[e.code]; if (e.code === 'Escape' || e.code === 'KeyP'){ togglePause(); e.preventDefault(); return; }
   if (k){ if (!input[k]) input[k + 'Pressed'] = true; input[k] = true; e.preventDefault(); } });
 addEventListener('keyup', e => { const k = keyMap[e.code]; if (k) input[k] = false; });
+// Touch controls. The d-pad direction is recomputed from the CURRENT touches on every event (targetTouches),
+// so a lost touchend/pointerup can never leave a direction stuck "held". Mouse/pen still use pointer events.
+let releaseTouch = () => {};
 function bindTouch(root){
-  const dpad = root.querySelector('#dpad'), pts = new Map();
-  const upd = () => { input.left = [...pts.values()].includes('left'); input.right = [...pts.values()].includes('right'); dpad.dataset.dir = input.left ? 'left' : input.right ? 'right' : ''; };
+  const dpad = root.querySelector('#dpad'), pts = new Map(), btns = []; let tdirs = [];
+  const upd = () => { const all = [...pts.values(), ...tdirs]; input.left = all.includes('left'); input.right = all.includes('right'); dpad.dataset.dir = input.left && input.right ? '' : input.left ? 'left' : input.right ? 'right' : ''; };
   const dirOf = e => { const r = dpad.getBoundingClientRect(); return (e.clientX - r.left) < r.width/2 ? 'left' : 'right'; };
-  dpad.addEventListener('pointerdown', e => { e.preventDefault(); dpad.setPointerCapture(e.pointerId); pts.set(e.pointerId, dirOf(e)); upd(); });
+  const cap = (el, e) => { try { el.setPointerCapture(e.pointerId); } catch(_){} };
+  const onTouch = e => { e.preventDefault(); tdirs = [...e.targetTouches].map(dirOf); upd(); };
+  ['touchstart','touchmove','touchend','touchcancel'].forEach(ev => dpad.addEventListener(ev, onTouch, { passive:false }));
+  dpad.addEventListener('pointerdown', e => { e.preventDefault(); if (e.pointerType === 'touch') return; cap(dpad, e); pts.set(e.pointerId, dirOf(e)); upd(); });
   dpad.addEventListener('pointermove', e => { if (pts.has(e.pointerId)){ pts.set(e.pointerId, dirOf(e)); upd(); } });
-  ['pointerup','pointercancel','lostpointercapture'].forEach(ev => dpad.addEventListener(ev, e => { pts.delete(e.pointerId); upd(); }));
-  for (const [id, k] of [['#btn-a','jump'],['#btn-b','shoot'],['#btn-t','tuba']]){ const b = root.querySelector(id); if (!b) continue;
-    b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); if (!input[k]) input[k + 'Pressed'] = true; input[k] = true; b.classList.add('down'); });
-    ['pointerup','pointercancel','lostpointercapture'].forEach(ev => b.addEventListener(ev, () => { input[k] = false; b.classList.remove('down'); })); }
+  ['pointerup','pointercancel','lostpointercapture'].forEach(ev => dpad.addEventListener(ev, e => { if (pts.delete(e.pointerId)) upd(); }));
+  for (const [id, k] of [['#btn-a','jump'],['#btn-b','shoot'],['#btn-t','tuba']]){ const b = root.querySelector(id); if (!b) continue; const held = new Set(); btns.push({ b, k, held });
+    const up = e => { held.delete(e.pointerId); if (!held.size){ input[k] = false; b.classList.remove('down'); } };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); cap(b, e); held.add(e.pointerId); if (!input[k]) input[k + 'Pressed'] = true; input[k] = true; b.classList.add('down'); });
+    ['pointerup','pointercancel','lostpointercapture'].forEach(ev => b.addEventListener(ev, up)); }
+  // safety nets: a pointer that ends anywhere is released, and when NO finger is on the screen nothing touch-driven can be held
+  addEventListener('pointerup', e => { if (pts.delete(e.pointerId)) upd(); for (const o of btns) if (o.held.has(e.pointerId)){ o.held.delete(e.pointerId); if (!o.held.size){ input[o.k] = false; o.b.classList.remove('down'); } } }, true);
+  addEventListener('pointercancel', e => { if (pts.delete(e.pointerId)) upd(); }, true);
+  const allUp = e => { if (e.touches.length) return; if (tdirs.length){ tdirs = []; upd(); } for (const o of btns){ for (const id of o.held) if (!pts.has(id)) o.held.delete(id); if (!o.held.size && o.b.classList.contains('down')){ input[o.k] = false; o.b.classList.remove('down'); } } };
+  addEventListener('touchend', allUp, true); addEventListener('touchcancel', allUp, true);
+  releaseTouch = () => { pts.clear(); tdirs = []; for (const o of btns){ o.held.clear(); o.b.classList.remove('down'); } dpad.dataset.dir = ''; };
   root.addEventListener('contextmenu', e => e.preventDefault());
   const ic = root.querySelector('#btn-t canvas'); if (ic){ const x = ic.getContext('2d'), s = SP.item('tubaIcon'); ic.width = s.width; ic.height = s.height; x.drawImage(s, 0, 0); }
 }
+// drop every held direction/button (keyboard + touch): on stage start/end, pause, app switch, focus loss
+function releaseInput(){ releaseTouch(); for (const k in input) input[k] = false; }
+addEventListener('blur', releaseInput); addEventListener('pagehide', releaseInput);
 let uiRoot = null, tubaUI = '';
 function syncTubaUI(){ if (!uiRoot || !G) return; const st = G.tuba > 0 ? G.tuba + (G.tubaCool > 0 ? 'c' : '') : '';
   if (st === tubaUI) return; tubaUI = st; uiRoot.classList.toggle('has-tuba', G.tuba > 0);
@@ -510,7 +526,7 @@ function updateBoss(dt){
 function damageBoss(n, force){ const B = G.B; if ((B.inv > 0 && !force) || B.gone) return; const before = B.hp; B.hp = Math.max(0, B.hp - n); B.inv = n > 1 ? .5 : .08; sfx('bossHit'); puff(B.x + 14, B.y + 14, '#ffffff', 4);
   if (before > B.maxHp/2 && B.hp <= B.maxHp/2) G.pickups.push({ x:7.5*TS, y:20, vy:0 });
   if (B.hp <= 0){ B.gone = 2; G.eshots = []; Music.stop(); sfx('boom'); G.shake = .6; G.enemies.forEach(e => e.alive && kill(e)); } }
-function finish(kind){ if (G.done) return; G.done = true; Music.stop(); const o = G.opts, r = { coins:G.coins, lives:G.lives, bossHp:G.B ? G.B.hp : 0, tuba:G.p.dead ? 0 : G.tuba, tubaKO:G.tubaKO };
+function finish(kind){ if (G.done) return; G.done = true; Music.stop(); releaseInput(); const o = G.opts, r = { coins:G.coins, lives:G.lives, bossHp:G.B ? G.B.hp : 0, tuba:G.p.dead ? 0 : G.tuba, tubaKO:G.tubaKO };
   setTimeout(() => { stop(); if (kind === 'clear') o.onClear && o.onClear(r); else if (kind === 'gameover') o.onGameOver && o.onGameOver(r); else o.onQuit && o.onQuit(r); }, kind === 'clear' ? 200 : 600); }
 
 // ---------- render ----------
@@ -625,18 +641,18 @@ function frame(ts){
   if (!G.paused && !G.done){ acc += dt; let n = 0; while (acc >= 1/60 && n < 5){ step(1/60); acc -= 1/60; n++; if (!G) return; } }
   if (G) draw();
 }
-function togglePause(force){ if (!G || G.done) return; G.paused = force !== undefined ? force : !G.paused; sfx('pause');
+function togglePause(force){ if (!G || G.done) return; G.paused = force !== undefined ? force : !G.paused; sfx('pause'); releaseInput();
   if (G.paused) Music.stop(); else Music.start(G.th, G.boss); pausedCb && pausedCb(G.paused); }
 function start(canvas, root, opts){
   stop(); ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
   sfxOn = opts.sfx !== false; musicOn = opts.music !== false; pausedCb = opts.onPause;
   if (!root.dataset.bound){ bindTouch(root); root.dataset.bound = '1'; } uiRoot = root; tubaUI = '';
-  Object.keys(input).forEach(k => input[k] = false);
+  releaseInput();
   newRun(opts); syncTubaUI(); ac(); Music.start(G.th, G.boss); last = performance.now(); acc = 0; raf = requestAnimationFrame(frame);
 }
-function stop(){ cancelAnimationFrame(raf); Music.stop(); G = null; tubaUI = ''; if (uiRoot) uiRoot.classList.remove('has-tuba'); }
+function stop(){ cancelAnimationFrame(raf); Music.stop(); releaseInput(); G = null; tubaUI = ''; if (uiRoot) uiRoot.classList.remove('has-tuba'); }
 function quit(){ if (G && !G.done){ G.done = true; const o = G.opts, r = { coins:G.coins, lives:G.lives, tuba:G.p.dead ? 0 : G.tuba, tubaKO:G.tubaKO }; stop(); o.onQuit && o.onQuit(r); } }
-document.addEventListener('visibilitychange', () => { if (document.hidden && G && !G.paused) togglePause(true); });
+document.addEventListener('visibilitychange', () => { if (document.hidden){ releaseInput(); if (G && !G.paused) togglePause(true); } });
 
 // ---------- overworld map (90s island-hopping style) ----------
 function iconFor(x, theme, cx, cy, t){
