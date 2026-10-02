@@ -217,15 +217,29 @@ function finalRowsHTML(id){
       ${st.open?`<button class="btn btn-pink play-btn" data-final="1">${done?'REPLAY':'PLAY'}</button>`:''}</div>
     ${done ? `<div class="stage done"><div><b>🎬 Watch the ending</b><div class="why">Character parade + THE END</div></div><button class="btn btn-yellow play-btn" data-ending="1">WATCH</button></div>` : ''}`;
 }
+// World screen header: the world's real boss sprite (pixel-perfect scale, gentle glow + idle bob), not an emoji.
+// Teacher-made worlds fall back to the golem. In the LAST world, once its boss is beaten, a small Mr. Kurilla teaser joins.
+function bossPicHTML(p, w){
+  const key = PQSprites.BOSSES.includes((p.world || {}).boss) ? p.world.boss : 'golem', last = p.id === lastPiece().id && w.boss > 0;
+  return `<div class="bf boss-pic-wrap${w.boss ? ' beaten' : ''}"><canvas class="boss-pic" data-boss="${key}" role="img" aria-label="${esc(p.boss)}"></canvas>
+    ${w.boss ? `<span class="boss-badge">⭐ DEFEATED${w.boss > 1 ? ' ×' + w.boss : ''}</span>` : ''}
+    ${last ? `<div class="kurilla-tease" title="Mr. Kurilla"><canvas class="boss-pic" data-boss="kurilla" role="img" aria-label="Mr. Kurilla"></canvas><span>${S.game.finalBossBeaten ? '🥁 Beaten!' : '🧙 Final boss!'}</span></div>` : ''}</div>`;
+}
+function paintBossPics(body){
+  body.querySelectorAll('canvas.boss-pic').forEach(c => { const f = PQSprites.bossFrames(c.dataset.boss).r; c.width = f.width; c.height = f.height;
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(f, 0, 0);
+    const big = !c.closest('.kurilla-tease'), sc = big ? Math.max(2, Math.round(128/Math.max(f.width, f.height))) : 2;   // whole-number scale = crisp pixels
+    c.style.width = f.width*sc + 'px'; c.style.height = f.height*sc + 'px'; });
+}
 function openWorld(id){
   const p = P[id], w = gw(id), open = worldOpen(id);
   openModal(`
-    <div class="boss-hero" style="--c:${p.color}"><div class="bf">${w.boss ? '💀' : p.face}</div><div class="hint wl">WORLD ${p.lv}</div><h2>${esc(p.title)}</h2>
+    <div class="boss-hero" style="--c:${p.color}">${bossPicHTML(p, w)}<div class="hint wl">WORLD ${p.lv}</div><h2>${esc(p.title)}</h2>
       <div class="hint">Boss: <b>${esc(p.boss)}</b></div><div class="hint" style="margin-top:6px">${esc(p.blurb)}</div></div>
     ${p.yt ? hearHTML(p) : ''}
     ${stagesHTML(id)}
     <div class="credits">${p.composer?`🎼 ${esc(p.title)} by ${esc(p.composer)}`:''}${p.publisher?` · ${esc(p.publisher)}`:''}</div>
-    ${open ? '' : '<p class="hint center">🔒 This world opens after you beat the boss of the world before it.</p>'}`);
+    ${open ? '' : '<p class="hint center">🔒 This world opens after you beat the boss of the world before it.</p>'}`, paintBossPics);
 }
 const goldName = () => `Golden ${INST_NAME[S.game.inst || 'sax'] || 'Sax'}`;
 function hearHTML(p){
