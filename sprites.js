@@ -136,16 +136,16 @@ const EN = {
 };
 // "mix-in" enemies that show up in EVERY world alongside that world's own enemy. Full frames, drawn facing LEFT.
 const MIX = {
-  // Mr. Dinosaur: big friendly cartoon dino in a red bow tie (walks, takes 2 note hits)
-  dino: { pal:{ g:'#5fd068', G:'#2f8a3e', t:'#fff0b0', O:'#ff9a3c' }, f:[[
-"....kkkkkk..........", "...kggggggk..kk.....", "..kggggggggkkOOk....", ".kggwwkgggggkOOk....", ".kggwkkggggggkk.....",
-"kggggggggggggk.kk...", "kgkgggggggggggkOOk..", "kggggggggggggggkk...", ".kcggggggggggggk....", "..kkkkkkgggggggk....",
-"...krkkkrkggggggk...", "...krrkrrkgggggggk..", "...krkkkrkggggggggkk", "..kgktttttggggggggGk", "...kttttttgggggggkk.",
+  // Mr. Dinosaur: big friendly cartoon dino, BROWN with white spots, lighter tan belly and his red bow tie (walks, takes 2 note hits)
+  dino: { pal:{ g:'#a5693a', G:'#6b3f1f', t:'#e2b47e', O:'#f0b45a', z:'#ffffff' }, f:[[
+"....kkkkkk..........", "...kgggzggk..kk.....", "..kggggzzggkkOOk....", ".kggwwkgggggkOOk....", ".kggwkkggggggkk.....",
+"kggggggggggggk.kk...", "kgkgggggggzzggkOOk..", "kggggggggggzgggkk...", ".kcggggggggggggk....", "..kkkkkkgggggggk....",
+"...krkkkrkggggzgk...", "...krrkrrkggggzzgk..", "...krkkkrkgggggggzkk", "..kgktttttggzgggggGk", "...kttttttggzzgggkk.",
 "....kttttgggggggk...", ".....kkkkkkkkkkk....", ".....kGGk...kGGk....", "....kkkk...kkkk....."
   ],[
-"....kkkkkk..........", "...kggggggk..kk.....", "..kggggggggkkOOk....", ".kggwwkgggggkOOk....", ".kggwkkggggggkk.....",
-"kggggggggggggk.kk...", "kgkgggggggggggkOOk..", "kggggggggggggggkk...", ".kcggggggggggggk....", "..kkkkkkgggggggk....",
-"...krkkkrkggggggk...", "...krrkrrkgggggggkk.", "...krkkkrkggggggggGk", "..kgktttttgggggggkk.", "...kttttttgggggggk..",
+"....kkkkkk..........", "...kgggzggk..kk.....", "..kggggzzggkkOOk....", ".kggwwkgggggkOOk....", ".kggwkkggggggkk.....",
+"kggggggggggggk.kk...", "kgkgggggggzzggkOOk..", "kggggggggggzgggkk...", ".kcggggggggggggk....", "..kkkkkkgggggggk....",
+"...krkkkrkggggzgk...", "...krrkrrkggggzzgkk.", "...krkkkrkgggggggzGk", "..kgktttttggzggggkk.", "...kttttttggzzgggk..",
 "....kttttgggggggk...", ".....kkkkkkkkkkk....", "......kGGk.kGGk.....", ".....kkkk.kkkk......"
   ]] },
   // Meep the green alien: one big eye, TWO antennas with yellow ball tips (they droop + spread while hopping), hops around.
