@@ -300,7 +300,9 @@ const SHOOT = {
 };
 const SFX = {
   jump:()=>blip('square', 260, 620, .14, .14), coin:()=>{ blip('triangle', 1047, 1047, .06, .3); blip('triangle', 1568, 1568, .14, .3, .05); },
-  stomp:()=>{ blip('square', 220, 70, .14, .2); noise(.06, .2, 0, 400); }, bump:()=>blip('square', 140, 110, .08, .2), hurt:()=>blip('sawtooth', 500, 140, .3, .2),
+  stomp:()=>{ blip('square', 220, 70, .14, .2); noise(.06, .2, 0, 400); },
+  // Meep's squeaky "meep!": two quick rising high blips with a pitch bend (~0.2 s), a soft sine layer makes it cute rather than harsh
+  meep:()=>{ blip('square', 1250, 1900, .075, .11, .02); blip('sine', 1250, 1900, .075, .16, .02); blip('square', 1450, 2500, .1, .11, .115); blip('sine', 1450, 2500, .1, .16, .115); }, bump:()=>blip('square', 140, 110, .08, .2), hurt:()=>blip('sawtooth', 500, 140, .3, .2),
   die:()=>[72,67,64,60,55].forEach((m,i)=>blip('square', mtof(m), mtof(m), .14, .16, i*.12)), power:()=>[60,64,67,72,76].forEach((m,i)=>blip('square', mtof(m), mtof(m), .08, .12, i*.06)),
   bossHit:()=>{ noise(.12, .3, 0, 300); blip('square', 160, 90, .15, .2); }, clear:()=>[[72,0],[76,.12],[79,.24],[84,.36],[79,.6],[84,.72],[88,.84]].forEach(([m,t])=>blip('square', mtof(m), mtof(m), .16, .13, t)),
   boom:()=>{ noise(.6, .4, 0, 100); blip('sawtooth', 120, 40, .6, .25); },
@@ -388,7 +390,7 @@ function resetLevel(first){
   G.coinList = b.coins.map(c => ({ ...c, taken:false }));
   G.enemies = b.enemies.map(e => { const K = ENEMY_KIND[e.type] || {};
     return { ...e, w:K.w || 14, h:K.h || 14, vx:-(K.speed || 28), vy:0, baseY:e.y, t:Math.random()*6, alive:true, dead:0, face:-1, hp:K.hp || 1, st:'idle', cool:ARCHER.first + Math.random(), dir:-1, hopT:.4 + Math.random()*.5 }; });
-  G.shots = []; G.eshots = []; G.parts = []; G.bumps = []; G.pops = []; G.pickups = []; G.bombs = []; G.blasts = [];
+  G.shots = []; G.eshots = []; G.parts = []; G.bumps = []; G.pops = []; G.pickups = []; G.bombs = []; G.blasts = []; G.floats = [];
   const sx = G.cpReached ? b.cpX : b.startX;
   G.p = { x:sx, y:(gTopAt(sx) - 2)*TS - 4, w:10, h:20, vx:0, vy:0, face:1, onGround:false, coyote:0, buffer:0, hearts:G.maxHearts, inv:first ? 0 : 1.5, cool:0, dead:0, anim:0, clear:0 };
   G.cam = clamp(G.p.x - 100, 0, Math.max(0, G.L.w*TS - W));
@@ -483,6 +485,7 @@ function step(dt){
   updateParts(dt);
   for (const b of G.bumps) b.t += dt; G.bumps = G.bumps.filter(b => b.t < .2);
   for (const c of G.pops){ c.t += dt; c.y += c.vy*dt; c.vy += 600*dt; } G.pops = G.pops.filter(c => c.t < .5);
+  for (const f of G.floats){ f.t += dt; f.y -= 28*dt; } G.floats = G.floats.filter(f => f.t < .8);
   syncTubaUI();
   // camera
   const target = clamp(p.x - 100 + p.face*16, 0, Math.max(0, G.L.w*TS - W)); G.cam += (target - G.cam)*Math.min(1, dt*6);
@@ -513,7 +516,9 @@ function updateArcher(e, dt, p){ // hedgehog: shuffle -> wind-up ("!", quills up
   else if (e.st === 'wind'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'throw'; e.stT = .35; sfx('toss');
       G.eshots.push({ kind:'arrow', x:e.x + e.w/2 + e.face*10, y:e.y + 3, vx:e.face*A.speed, vy:0, t:0, from:e }); } }
   else if (e.st === 'throw'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'idle'; e.cool = A.cool + Math.random()*.6; } } }
-function kill(e, stomp){ e.alive = false; e.dead = 1; e.vy = -200; sfx('stomp'); puff(e.x + 7, e.y + 7, '#ffffff', 6); G.coins += 0; }
+function kill(e, stomp){ e.alive = false; e.dead = 1; e.vy = -200; sfx('stomp'); puff(e.x + 7, e.y + 7, '#ffffff', 6); G.coins += 0;
+  if (e.type === 'meep'){ if (G.t - (G.meepT ?? -1) > .12){ G.meepT = G.t; sfx('meep'); G.meeps = (G.meeps || 0) + 1; }   // one squeak at a time even if a tuba blast pops several
+    G.floats.push({ text:'MEEP!', x:e.x + e.w/2, y:e.y - 6, t:0 }); } }
 function bonk(tx, ty){ const v = tileAt(tx, ty); G.bumps.push({ tx, ty, t:0 });
   if (v === 3){ G.L.map[ty*G.L.w + tx] = 4; const lucky = (hash(tx + ':' + ty) % 7 === 0) && G.p.hearts < G.maxHearts;
     const chordBlock = !G.chord && hash('c' + tx + ':' + ty) % 9 === 0;
@@ -692,6 +697,7 @@ function draw(){
     else x.drawImage(img, Math.round(dx - cam), Math.round(p.y - 1)); }
   // particles
   for (const q of G.parts){ x.fillStyle = q.color; x.fillRect(Math.round(q.x - cam), Math.round(q.y), q.s, q.s); }
+  for (const f of G.floats){ if (f.t > .6 && Math.floor(f.t*20) % 2) continue; SP.text(x, f.text, Math.round(f.x - cam - SP.textWidth(f.text)/2), Math.round(f.y), '#ffffff', '#1a1030'); }   // tiny 'MEEP!' pop (over the hero)
   weather(x, cam); x.restore();
   hud(x);
 }
@@ -781,9 +787,17 @@ function drawOverworld(canvas, worlds, opts = {}){
   for (let y = 0; y < h; y += 8) for (let i = 0; i < W; i += 16){ const off = ((y/8) % 2)*8 + Math.round(Math.sin(t*2 + y)*2); x.fillStyle = '#4f8ff0'; x.fillRect(i + off, y + 3, 5, 1); }
   SP.text(x, 'BAND QUEST', Math.round(W/2 - SP.textWidth('BAND QUEST', 2)/2), 10, '#ffd23f', '#1a1030', 2);
   const pos = worlds.map((w, i) => ({ x:i % 2 ? 182 : 74, y:70 + i*78 }));
-  // dotted path
-  for (let i = 0; i < n - 1; i++){ const a = pos[i], b = pos[i+1]; for (let s = 0; s <= 1; s += .06){ const px = a.x + (b.x - a.x)*s, py = a.y + (b.y - a.y)*s + Math.sin(s*Math.PI)*10;
-    x.fillStyle = '#1a1030'; x.fillRect(Math.round(px) - 2, Math.round(py) - 2, 5, 5); x.fillStyle = '#ffe9a0'; x.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); } }
+  // celebration effects (after a boss): fx = { kind:'unlock'|'final', from, to, e:seconds since start }
+  const fx = opts.fx || null, fe = fx ? fx.e : 0, U = fx && fx.kind === 'unlock' && fx.to > 0 && fx.to < n ? fx : null, FIN = fx && fx.kind === 'final' ? fx : null;
+  const PATH_T0 = .35, PATH_T1 = 1.65, pathP = U ? clamp((fe - PATH_T0)/(PATH_T1 - PATH_T0), 0, 1) : 1;
+  const curve = (a, b, s) => ({ x:a.x + (b.x - a.x)*s, y:a.y + (b.y - a.y)*s + Math.sin(s*Math.PI)*10 });
+  const ring = (cx, cy, rx, ry, col, k, a0, sz = 3) => { x.fillStyle = col; for (let j = 0; j < k; j++){ const a = a0 + j/k*Math.PI*2; x.fillRect(Math.round(cx + Math.cos(a)*rx) - (sz >> 1), Math.round(cy + Math.sin(a)*ry) - (sz >> 1), sz, sz); } };
+  if (FIN) SP.text(x, 'ALL CLEAR!', Math.round(W/2 - SP.textWidth('ALL CLEAR!', 2)/2), 10, Math.floor(fe*4) % 2 ? '#ff4f79' : '#ffd23f', '#1a1030', 2);
+  // dotted path (the path to a newly unlocked world draws itself in gold, dot by dot)
+  for (let i = 0; i < n - 1; i++){ const a = pos[i], b = pos[i+1], drawing = U && i === U.to - 1;
+    for (let s = 0; s <= 1; s += .06){ if (drawing && s > pathP) break; const { x:px, y:py } = curve(a, b, s);
+      x.fillStyle = '#1a1030'; x.fillRect(Math.round(px) - 2, Math.round(py) - 2, 5, 5); x.fillStyle = drawing ? '#ffd23f' : '#ffe9a0'; x.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); }
+    if (drawing && pathP > 0 && pathP < 1){ const h = curve(a, b, pathP); ring(h.x, h.y, 6, 6, '#ffffff', 4, fe*8, 2); } }
   const hits = [];
   worlds.forEach((w, i) => {
     const { x:cx, y:cy } = pos[i], th = themeOf(w.world || {});
@@ -801,17 +815,28 @@ function drawOverworld(canvas, worlds, opts = {}){
     for (let s = 0; s < 3; s++){ x.fillStyle = '#1a1030'; x.fillRect(cx - 22 + s*10, cy - 38, 7, 7); x.fillStyle = w.cleared && w.cleared[s] ? '#ffd23f' : '#4a3a73'; x.fillRect(cx - 21 + s*10, cy - 37, 5, 5); }
     x.fillStyle = '#1a1030'; x.fillRect(cx + 8, cy - 39, 13, 9); x.fillStyle = w.bossBeaten ? '#ff4f79' : w.bossOpen ? '#ffd23f' : '#4a3a73'; x.fillRect(cx + 9, cy - 38, 11, 7);
     SP.text(x, w.bossBeaten ? '!' : 'B', cx + 12, cy - 38, '#1a1030', null);
-    if (w.locked){ x.globalAlpha = .55; x.fillStyle = '#1a1030'; for (let r = -15; r <= 15; r++){ const hw = Math.round(Math.sqrt(1 - (r/16)*(r/16))*54); x.fillRect(cx - hw, cy + r, hw*2, 1); } x.globalAlpha = 1;
-      const R = (a, b, ww, hh, c) => { x.fillStyle = c; x.fillRect(cx + a, cy + b, ww, hh); };
+    const lockShown = w.locked || (U && i === U.to && fe < PATH_T1), jig = U && i === U.to && fe > PATH_T1 - .45 ? Math.round(Math.sin(fe*60)*2) : 0;
+    if (lockShown){ x.globalAlpha = .55; x.fillStyle = '#1a1030'; for (let r = -15; r <= 15; r++){ const hw = Math.round(Math.sqrt(1 - (r/16)*(r/16))*54); x.fillRect(cx - hw, cy + r, hw*2, 1); } x.globalAlpha = 1;
+      const R = (a, b, ww, hh, c) => { x.fillStyle = c; x.fillRect(cx + a + jig, cy + b, ww, hh); };
       R(-8, -14, 16, 2, '#1a1030'); R(-8, -14, 2, 8, '#1a1030'); R(6, -14, 2, 8, '#1a1030'); R(-6, -12, 2, 6, '#c8c8d8'); R(4, -12, 2, 6, '#c8c8d8'); R(-6, -14, 12, 2, '#c8c8d8');
       R(-11, -6, 22, 16, '#1a1030'); R(-10, -5, 20, 14, '#ffd23f'); R(-2, -2, 4, 5, '#1a1030'); R(-1, 3, 2, 3, '#1a1030'); }
     hits.push({ id:w.id, x:cx - 58, y:cy - 42, w:116, h:76 });
   });
-  if (opts.hero){ const cur = Math.max(0, worlds.findIndex(w => w.id === opts.current)), f = SP.heroFrames(opts.hero.inst, opts.hero.hair), pp = pos[cur];
-    x.drawImage(f.stand.r, pp.x - 44, pp.y - 6 + Math.round(Math.sin(t*4))); }
+  // unlock: the lock bursts, the island pops and then glows; final: every island glows in turn + fireworks
+  if (U){ const b = pos[U.to], k = fe - PATH_T1;
+    if (k > 0 && k < .5){ const sc = 1 + .22*Math.sin(Math.PI*k/.5), sw = 124, sh = 88, tmp = document.createElement('canvas'); tmp.width = sw; tmp.height = sh;
+      tmp.getContext('2d').drawImage(canvas, b.x - sw/2, b.y - 46, sw, sh, 0, 0, sw, sh); x.drawImage(tmp, Math.round(b.x - sw*sc/2), Math.round(b.y - 4 - 42*sc), Math.round(sw*sc), Math.round(sh*sc)); }
+    if (k > 0 && k < .7) ring(b.x, b.y - 4, 8 + k*90, 6 + k*40, ['#ffd23f','#ffffff','#ff4f79'][Math.floor(k*12) % 3], 12, k*3);
+    if (k > 0 && k < 9){ const pulse = .5 + .5*Math.sin(fe*6); x.globalAlpha = .55 + .45*pulse; ring(b.x, b.y, 62 + pulse*3, 22 + pulse, '#ffd23f', 28, fe*.8); ring(b.x, b.y, 66 + pulse*3, 25 + pulse, '#ffffff', 6, -fe*1.6, 2); x.globalAlpha = 1; } }
+  if (FIN){ pos.forEach((b, i) => { const k = fe - i*.3; if (k > 0){ const pulse = .5 + .5*Math.sin(fe*6 + i); x.globalAlpha = .55 + .45*pulse; ring(b.x, b.y, 62 + pulse*3, 22 + pulse, ['#ffd23f','#ff4f79','#7cc0ff','#9ff0c8','#c9b6ff'][i % 5], 28, fe*.8 + i); x.globalAlpha = 1; } });
+    for (let j = 0; j < 6; j++){ const k = (fe + j*.37) % 1.6, bx = 30 + ((j*97) % 196), by = 40 + ((j*151) % Math.max(60, h - 120)); if (k < 1.1) ring(bx, by, 4 + k*26, 4 + k*26, ['#ffd23f','#ff4f79','#ffffff','#9ff0c8'][j % 4], 10, j, k < .7 ? 3 : 2); } }
+  if (opts.hero){ const cur = Math.max(0, worlds.findIndex(w => w.id === opts.current)), f = SP.heroFrames(opts.hero.inst, opts.hero.hair);
+    let pp = pos[cur], walk = false; if (U && pathP < 1){ pp = curve(pos[U.to - 1], pos[U.to], pathP); walk = pathP > 0; }
+    const fr = walk ? (Math.floor(fe*8) % 2 ? f.run1 : f.run2) : f.stand, face = U && walk && pos[U.to].x < pos[U.to - 1].x ? fr.l : fr.r;
+    x.drawImage(face, Math.round(pp.x - 44), Math.round(pp.y - 6 + (walk ? 0 : Math.sin(t*4)))); }
   return hits;
 }
 
 window.PQGame = { start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
-  debug:{ get G(){ return G; }, get audio(){ return AC; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); } } };
+  debug:{ get G(){ return G; }, get audio(){ return AC; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); }, draw(){ if (G) draw(); } } };
 })();

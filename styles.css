@@ -245,3 +245,14 @@ body.in-game{overflow:hidden}
 .listen.done .listen-fill{width:100%!important;background:repeating-linear-gradient(90deg,#ffd23f 0 8px,#fff3a0 8px 16px)}
 .hear-sub{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:#4a3a73;padding:0 2px}
 .hear-sub a{color:#4a3a73}
+/* after-boss world-unlock banner (bottom of the screen, never over the focused island; dismissed by its buttons, a map tap or after 15 s) */
+.map-banner{position:fixed;left:50%;bottom:calc(14px + var(--safe-b));transform:translateX(-50%);z-index:45;width:min(94vw,500px);background:var(--yellow);color:var(--ink);border:var(--b);border-radius:18px;box-shadow:4px 4px 0 var(--ink);padding:12px 44px 12px 14px;animation:mbPop .55s cubic-bezier(.2,1.6,.4,1) both;animation-delay:1.5s}
+.map-banner .mb-k{font-weight:900;font-size:15px;letter-spacing:.3px;color:#9c1c50}
+.map-banner .mb-t{font-weight:900;font-size:21px;line-height:1.15;margin:2px 0 4px}
+.map-banner .mb-s{font-size:14px;line-height:1.35}
+.map-banner .mb-b{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.map-banner .mb-b .btn{min-height:44px;padding:8px 14px;font-size:16px}
+.map-banner .mb-x{position:absolute;top:6px;right:6px;width:36px;height:36px;border-radius:50%;border:3px solid var(--ink);background:#fff;font-weight:900}
+@keyframes mbPop{0%{opacity:0;transform:translate(-50%,40px) scale(.8)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.map-banner{animation:none}}
+body.has-map-banner #app{padding-bottom:calc(240px + var(--safe-b))}   /* room to scroll the last island above the banner */

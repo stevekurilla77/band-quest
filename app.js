@@ -99,6 +99,7 @@ const sfx = {
   blip(){ if (S.sound) tone(660,0,.08,'triangle',.25); },
   tick(){ if (S.sound) tone(440,0,.06,'square',.15); },
   over(){ if (S.sound) [392,330,262,196].forEach((f,i)=>tone(f,i*.18,.3,'triangle',.25)); },
+  unlock(){ if (S.sound) [523,659,784,1046,1318].forEach((f,i)=>tone(f,i*.07,.22,'square',.16)); },
 };
 
 // ---------- FX, toast, modal ----------
@@ -155,14 +156,45 @@ let mapHits = [], mapT = 0, mapRaf = 0;
 function renderMap(){
   const c = $('#overworld'); if (!c || !window.PQGame) return;
   const cur = S.game.current && P[S.game.current] && worldOpen(S.game.current) ? S.game.current : (PIECES[0] && PIECES[0].id);
-  mapHits = PQGame.drawOverworld(c, worldsForMap(), { t:mapT, hero:{ inst:S.game.inst || 'sax', hair:S.game.hair }, current:cur });
+  const fx = mapFx ? { kind:mapFx.kind, from:mapFx.from, to:mapFx.to, e:(performance.now() - mapFx.t0)/1000 } : null;
+  mapHits = PQGame.drawOverworld(c, worldsForMap(), { t:mapT, hero:{ inst:S.game.inst || 'sax', hair:S.game.hair }, current:cur, fx });
 }
-function mapLoop(ts){ mapRaf = 0; if ($('#main').hidden || !$('#game').hidden) return; mapT = ts/1000; renderMap(); mapRaf = setTimeout(() => requestAnimationFrame(mapLoop), 120); }
+function mapLoop(ts){ mapRaf = 0; if ($('#main').hidden || !$('#game').hidden) return; mapT = ts/1000; renderMap();
+  if (mapFx && (performance.now() - mapFx.t0)/1000 > MAPFX_SECS) mapFx = null;
+  mapRaf = mapFx ? requestAnimationFrame(mapLoop) : setTimeout(() => requestAnimationFrame(mapLoop), 120); }
+function restartMapLoop(){ cancelAnimationFrame(mapRaf); clearTimeout(mapRaf); mapRaf = 0; startMapLoop(); }
+
+// ---------- After a boss: back on the map, the path draws to the next world, its island pops + glows, and a banner names it ----------
+const THEME_NAME = { snow:'❄️ Snowy mountains', farm:'🌾 Sunny farm', candy:'🍬 Candy-cane town', castle:'🏰 Mystery castle', haunted:'👻 Haunted graveyard', meadow:'🌼 Flower meadow' };
+const MAPFX_SECS = 9;
+let mapFx = null, bannerTimer = 0;
+function hideMapBanner(){ clearTimeout(bannerTimer); const b = $('#map-banner'); if (b) b.remove(); document.body.classList.remove('has-map-banner'); }
+function mapBanner(html){ hideMapBanner(); const b = document.createElement('div'); b.id = 'map-banner'; b.className = 'map-banner'; b.setAttribute('role', 'status'); b.setAttribute('aria-live', 'polite');
+  b.innerHTML = html + '<button class="mb-x" id="mb-x" aria-label="close">✕</button>'; document.body.appendChild(b); document.body.classList.add('has-map-banner');
+  b.addEventListener('click', e => { const w = e.target.closest('[data-open-world]'); if (w){ hideMapBanner(); sfx.blip(); openWorld(w.dataset.openWorld); } else if (e.target.closest('#mb-x, [data-mb-ok]')) hideMapBanner(); });
+  bannerTimer = setTimeout(hideMapBanner, 15000); }
+// one gentle scroll so the island is in view: a single smooth scroll, never repeated, so the player can scroll the map freely right away
+function focusIsland(i){ const c = $('#overworld'); if (!c) return; const r = c.getBoundingClientRect(), cy = 70 + i*78, y = scrollY + r.top + cy*r.height/c.height - innerHeight*.36;
+  scrollTo({ top:Math.max(0, y), behavior:'smooth' }); }
+function mapCelebrate(kind, to){
+  const n = PIECES.length, from = Math.max(0, to - 1);
+  mapFx = { kind, from, to, t0:performance.now() }; renderAll(); restartMapLoop();
+  if (kind === 'unlock'){ const q = PIECES[to];
+    setTimeout(() => { if (mapFx && mapFx.kind === 'unlock') sfx.unlock(); }, 1650);
+    mapBanner(`<div class="mb-k">🔓 World ${q.lv} unlocked!</div><div class="mb-t">${esc(q.title)}</div>
+      <div class="mb-s">${THEME_NAME[(q.world || {}).theme] || '🗺️ New lands'}${q.composer ? ` · 🎼 ${esc(q.composer)}` : ''}<br>Boss: <b>${esc(q.boss)}</b></div>
+      <div class="mb-b"><button class="btn btn-yellow" data-open-world="${q.id}">▶ Enter World ${q.lv}</button><button class="btn btn-ghost" data-mb-ok>Later</button></div>`); }
+  else { sfx.win(); confetti(160); setTimeout(() => confetti(120), 900);
+    mapBanner(`<div class="mb-k">🏆 All worlds complete!</div><div class="mb-t">You beat all ${n} bosses!</div>
+      <div class="mb-s">Every island is cleared. Replay any stage to chase a high score, or hear the pieces again for golden instruments.</div>
+      <div class="mb-b"><button class="btn btn-yellow" data-mb-ok>🎉 Awesome!</button></div>`); }
+  focusIsland(to);
+}
 function startMapLoop(){ if (!mapRaf) mapRaf = requestAnimationFrame(mapLoop); }
 $('#overworld').addEventListener('click', e => {
   const c = e.currentTarget, r = c.getBoundingClientRect(), x = (e.clientX - r.left)*c.width/r.width, y = (e.clientY - r.top)*c.height/r.height;
   const hit = mapHits.find(h => x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h);
-  if (!hit) return; sfx.blip();
+  if (!hit) return; sfx.blip(); hideMapBanner();
   if (worldOpen(hit.id)){ S.game.current = hit.id; save(); }
   openWorld(hit.id);
 });
@@ -267,7 +299,7 @@ function playStage(id, i, bossHp){
   const st = stageState(id, i); if (!st.open){ toast('🔒 ' + st.why); return; }
   if (S.game.lives <= 0){ S.game.lives = START_LIVES; S.game.score = 0; }
   const p = P[id], startLives = S.game.lives, tuba = tubaCarry && tubaCarry.id === id ? tubaCarry.ammo : 0; tubaCarry = null; S.game.current = id; save(); closeModal();
-  clearTimeout(mapRaf); mapRaf = 0;
+  clearTimeout(mapRaf); cancelAnimationFrame(mapRaf); mapRaf = 0; mapFx = null; hideMapBanner();
   $('#game').hidden = false; $('#pause-menu').hidden = true; document.body.classList.add('in-game');
   const back = html => { $('#game').hidden = true; document.body.classList.remove('in-game'); renderAll(); startMapLoop(); if (html) openModal(html); };
   PQGame.start($('#game-canvas'), $('#game'), {
@@ -278,12 +310,18 @@ function playStage(id, i, bossHp){
     onClear:r => { const w = gw(id); S.game.coins += r.coins; S.game.score += r.coins; S.game.lives = r.lives; tubaTally(r); if (r.tuba > 0) tubaCarry = { id, ammo:r.tuba };
       if (i < 3){ w.cleared[i] = true; w.best[i] = Math.max(w.best[i], r.coins); } else { w.boss++; w.best[3] = Math.max(w.best[3], r.coins); }
       const nb = checkBadges({ nosweat: r.lives >= startLives }); save(); sfx.win(); confetti(i === 3 ? 140 : 60);
-      const nxtWorld = i === 3 ? PIECES[worldIdx(id) + 1] : null;
-      const next = i < 3 ? { id, i:i+1 } : nxtWorld ? { id:nxtWorld.id, i:0 } : null;
+      const nxtWorld = i === 3 ? PIECES[worldIdx(id) + 1] : null, firstWin = i === 3 && w.boss === 1;
+      const celebrate = !firstWin ? null : nxtWorld ? 'unlock' : PIECES.every(q => gw(q.id).boss > 0) ? 'final' : null;
+      if (celebrate === 'unlock'){ S.game.current = nxtWorld.id; save(); }   // the hero walks to the new island on the map
+      const next = i < 3 ? { id, i:i+1 } : null;
       back(`<div class="result"><div class="big">${i===3?'🏰 BOSS DEFEATED!':'🚩 STAGE CLEAR!'}</div><p><b>${esc(p.title)}</b> · ${i===3?esc(p.boss):`Stage ${i+1}`}<br>🪙 ${r.coins} note coins · ❤️ ${r.lives} lives</p>${r.tuba > 0 && i < 3 ? `<p>💥 Your <b>GIANT TUBA</b> (${r.tuba} bass bomb${r.tuba>1?'s':''}) comes with you to the next stage in this world!</p>` : ''}
         ${i===3 ? (nxtWorld ? `<p>🗺️ <b>World ${nxtWorld.lv}: ${esc(nxtWorld.title)}</b> is open!</p>` : '<p>🏆 You beat every world! Replay any stage to chase a high score.</p>') : i===2 ? '<p>🏰 The Boss Castle is open!</p>' : ''}
         ${badgeHTML(nb)}${next ? `<button class="btn btn-big btn-yellow" data-play="${next.id}" data-stage="${next.i}">▶ ${next.i===3?'Storm the castle':next.i===0?`Go to World ${P[next.id].lv}`:`Stage ${next.i+1}`}</button>` : ''}
-        <button class="btn btn-wide btn-ghost" id="res-ok">🗺️ Back to map</button></div>`); const ok = $('#res-ok'); if (ok) ok.onclick = closeModal; },
+        ${i === 3 ? `<button class="btn btn-big btn-yellow" id="res-ok">🗺️ ${celebrate === 'unlock' ? `See World ${nxtWorld.lv} on the map ➜` : celebrate === 'final' ? 'See your finished map ➜' : 'Back to map'}</button>`
+                  : `<button class="btn btn-wide btn-ghost" id="res-ok">🗺️ Back to map</button>`}</div>`);
+      const ok = $('#res-ok'); if (ok) ok.onclick = closeModal;
+      if (i === 3){ const to = celebrate === 'unlock' ? worldIdx(nxtWorld.id) : celebrate === 'final' ? PIECES.length - 1 : worldIdx(id);
+        modalClose = () => celebrate ? mapCelebrate(celebrate, to) : (renderAll(), focusIsland(to)); } },
     onGameOver:r => { S.game.coins += r.coins; S.game.lives = 0; tubaTally(r); checkBadges(); save(); sfx.over(); back(); continueScreen(id, i, r.bossHp); },
     onQuit:r => { S.game.coins += r.coins; S.game.score += r.coins; tubaTally(r); if (r.tuba > 0) tubaCarry = { id, ammo:r.tuba }; const nb = checkBadges(); save(); back(); if (nb.length) toast('🏅 New badge: ' + nb.map(b => esc(b.n)).join(', ')); },
   });

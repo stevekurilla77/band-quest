@@ -148,13 +148,14 @@ const MIX = {
 "...krkkkrkggggggk...", "...krrkrrkgggggggkk.", "...krkkkrkggggggggGk", "..kgktttttgggggggkk.", "...kttttttgggggggk..",
 "....kttttgggggggk...", ".....kkkkkkkkkkk....", "......kGGk.kGGk.....", ".....kkkk.kkkk......"
   ]] },
-  // Meep the green alien: one big eye, antenna, hops around
+  // Meep the green alien: one big eye, TWO antennas with yellow ball tips (they droop + spread while hopping), hops around.
+  // The antennas sit in the top 3 rows, above the 12x14 hitbox, so collision is unchanged.
   meep: { pal:{ g:'#8ef05a', G:'#3a9a2e', c:'#ffb0c8' }, f:[[
-"......kk......", ".....kyyk.....", "......kk......", "......kG......", "....kkkkkk....", "...kggggggk...",
+"..kk......kk..", ".kyyk....kyyk.", "..kkG....Gkk..", "....kG..Gk....", "....kkkkkk....", "...kggggggk...",
 "..kggwwwwggk..", ".kggwwkkwwggk.", ".kggwwkkwwggk.", ".kgggwwwwgggk.", ".kcggggggggck.", ".kggkggggkggk.",
 "..kggkkkkggk..", "...kggggggk...", "....kkkkkk....", "...kGk..kGk...", "..kkkk..kkkk.."
   ],[
-".....kk.......", "....kyyk......", ".....kk.......", "......kG......", "....kkkkkk....", "...kggggggk...",
+"..............", ".kk........kk.", "kyyk......kyyk", ".kkGGk..kGGkk.", "....kkkkkk....", "...kggggggk...",
 "..kggwwwwggk..", ".kggwwkkwwggk.", ".kggwwkkwwggk.", ".kgggwwwwgggk.", ".kcggggggggck.", ".kgggkkkkgggk.",
 "..kggkwwkggk..", "...kggggggk...", "....kkkkkk....", "....kGkkGk....", "....kk..kk...."
   ]] },
