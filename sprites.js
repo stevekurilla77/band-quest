@@ -159,7 +159,7 @@ const MIX = {
 "..kggwwwwggk..", ".kggwwkkwwggk.", ".kggwwkkwwggk.", ".kgggwwwwgggk.", ".kcggggggggck.", ".kgggkkkkgggk.",
 "..kggkwwkggk..", "...kggggggk...", "....kkkkkk....", "....kGkkGk....", "....kk..kk...."
   ]] },
-  // Sparky, a cute little dragon: flaps along in a wave
+  // Burney, a cute little dragon: flaps along in a wave
   dragon: { pal:{ O:'#ff8c42', t:'#ffe9a0', c:'#ff6fa0', C:'#c23a6a' }, f:[[
 "..........kk.kk...", ".........kcckcck..", "...k.k...kccccck..", "..kOkOk...kcccck...", ".kOOOOOk...kcck....",
 "kOwkOOOOk..kkk.....", "kOkkOOOOOkkOOk.....", "kOOOOOOOOOOOOOk....", ".kcOOOtttOOOOOOkk..", "..kkkOtttttOOOOOOk.",
@@ -309,7 +309,7 @@ function bossFrames(type){
 }
 function item(name, pal){ const key = 'it-'+name+(pal?JSON.stringify(pal):''); if (cache[key]) return cache[key];
   if (name === 'tubaL') return cache[key] = flip(item('tuba', pal)); return cache[key] = render(ITEMS[name], pal); }
-// ---- Mr. Kurilla, the friendly-villain wizard (final boss): purple robe + pointy star hat, glasses, goatee, staff topped with a golden note ----
+// ---- Mr. Kurilla, the friendly-villain wizard (final boss): purple robe + pointy star hat, glasses, a FULL beard, staff topped with a golden note ----
 // frame: 'stand' | 'cast' (staff raised, glowing) | 'happy' (big smile, for the ending). Drawn with rects; 32 x 40, facing right.
 function wizard(frame = 'stand'){
   const key = 'wiz-' + frame; if (cache[key]) return cache[key];
@@ -333,12 +333,19 @@ function wizard(frame = 'stand'){
   if (cast){ R(4, 15, 5, 8, k); R(5, 16, 3, 6, P); R(4, 13, 4, 3, k); R(5, 13, 2, 2, S); }
   else { R(5, 22, 5, 9, k); R(6, 23, 3, 7, P); R(6, 30, 3, 2, S); }
   R(18, 22, 8, 5, k); R(19, 23, 6, 3, P); R(23, 22, 4, 4, k); R(24, 23, 2, 2, S);
-  // head: face, glasses, eyebrows, smile, goatee
+  // head: face, glasses, eyebrows, smile (the full beard is drawn just below)
   R(8, 12, 12, 10, k); R(9, 13, 10, 8, S); R(9, 19, 10, 2, Sd);
   R(9, 15, 4, 3, k); R(14, 15, 4, 3, k); R(10, 16, 2, 1, '#ffffff'); R(15, 16, 2, 1, '#ffffff'); R(11, 16, 1, 1, k); R(16, 16, 1, 1, k); R(13, 16, 1, 1, k);
   if (frame === 'happy'){ R(10, 14, 3, 1, Hb); R(14, 14, 3, 1, Hb); } else { R(9, 13, 3, 1, Hb); R(12, 14, 1, 1, Hb); R(15, 14, 1, 1, Hb); R(16, 13, 3, 1, Hb); }   // mischievous brows
-  R(11, 19, 6, 1, k); R(10, 18, 1, 1, k); R(17, 18, 1, 1, k); if (frame === 'happy'){ R(11, 20, 6, 1, '#c0283a'); R(12, 20, 4, 1, '#ff8a8a'); }
-  R(12, 20, 4, 3, Hb); R(13, 23, 2, 1, Hb);
+  // FULL beard: sideburns down the cheeks, covering the jaw and chin, flowing down over the robe (to the belt), with a mustache
+  const Bh = '#7a5234', Bd = '#3e2616', rows = [[17, 8, 9], [17, 18, 19], [18, 8, 19], [19, 8, 19], [20, 8, 19], [21, 8, 19], [22, 8, 19], [23, 9, 18], [24, 9, 18], [25, 10, 17], [26, 10, 17], [27, 11, 16], [28, 12, 15], [29, 13, 14]];
+  for (const [y, a0, a1] of rows) R(a0 - 1, y, a1 - a0 + 3, 1, k);
+  R(12, 30, 4, 1, k);
+  for (const [y, a0, a1] of rows){ R(a0, y, a1 - a0 + 1, 1, Hb); if (y > 18) R(a0, y, 1, 1, Bd); if (y > 18) R(a1, y, 1, 1, Bd); }
+  for (const [a, b] of [[10, 21], [13, 23], [16, 22], [11, 25], [15, 26], [13, 28], [9, 20], [18, 20]]) R(a, b, 1, 2, Bh);   // wavy highlight strands
+  R(12, 24, 1, 2, Bd); R(15, 23, 1, 2, Bd); R(14, 27, 1, 1, Bd);
+  R(10, 18, 8, 1, Bh); R(10, 18, 1, 1, Hb); R(17, 18, 1, 1, Hb);   // mustache
+  if (frame === 'happy'){ R(11, 19, 6, 2, k); R(12, 19, 4, 1, '#c0283a'); R(12, 20, 4, 1, '#ff8a8a'); } else { R(12, 19, 4, 1, k); R(11, 19, 1, 1, Bd); R(16, 19, 1, 1, Bd); }   // mouth peeking out of the beard
   // pointy hat leaning back, with a brim and stars
   for (let r = 0; r < 11; r++){ const y = 1 + r, cx = 11 + Math.round(r*.35), hw = Math.round(r*.7); R(cx - hw - 1, y, hw*2 + 3, 1, k); R(cx - hw, y, hw*2 + 1, 1, P); R(cx + hw - 1, y, 2, 1, Pd); }
   R(7, 0, 3, 2, k); R(8, 0, 1, 1, Y);

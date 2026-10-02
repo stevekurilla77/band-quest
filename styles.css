@@ -284,3 +284,9 @@ body.has-map-banner #app{padding-bottom:calc(240px + var(--safe-b))}   /* room t
 .cine-later{margin-top:10px;color:#fff;border-color:#fff}
 .res-drum{display:block;margin:6px auto;width:96px;height:80px;image-rendering:pixelated;image-rendering:crisp-edges}
 .stage.final{border-color:#9b5de5}
+/* Settings → sound check */
+.sound-check{border:var(--b);border-radius:14px;padding:10px 12px;background:#fff;margin-bottom:4px}
+.sc-status{font-family:var(--head);font-size:18px;letter-spacing:.3px}
+.sc-status.good{color:#1d7a3a} .sc-status.warn{color:#b34700} .sc-status.bad{color:#b0102a}
+.sc-row{display:flex;gap:8px;margin-top:8px} .sc-row .btn{flex:1;min-height:48px}
+.sc-tip{margin:8px 0 0;font-size:13px}

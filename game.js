@@ -12,7 +12,7 @@ const TUBA = { ammo:5, cool:.8, radius:34, bossDmg:3 };
 const ENEMY_KIND = {
   dino:    { w:18, h:18, hp:2, speed:22 },            // Mr. Dinosaur: big, slow walker, takes 2 notes
   meep:    { w:12, h:14, hop:true, speed:40 },        // Meep the green alien: hops back and forth
-  dragon:  { w:14, h:12, wave:true, speed:34 },       // Sparky the little dragon: flies in a wave
+  dragon:  { w:14, h:12, wave:true, speed:34 },       // Burney the little dragon: flies in a wave
   hedgehog:{ w:14, h:10, archer:true, speed:8 },      // hedgehog archer: shuffles, winds up, throws a slow toy arrow
 };
 // hedgehog fairness: only throws at a hero who is on screen and not too close, warns first (wind-up + "!"), one arrow at a time, long cooldown
@@ -351,18 +351,57 @@ function genShip(foe = 'wisp'){
 
 // ---------- audio: chiptune SFX + tiny original music sequencer ----------
 let AC = null, master = null, musicGain = null;
-// iPhone audio: iOS can leave the context 'suspended' or 'interrupted' (screen lock, app switch, a call, the YouTube player, an app update),
-// and it only wakes up from inside a real tap. So: wake it whenever it isn't 'running', and try again on EVERY tap/key (see unlockAudio).
+// iPhone audio (v19). Three separate iOS problems, three fixes:
+//  1) Silent (ring/silent switch ON): iOS treats plain Web Audio as "ambient" sound and MUTES it. Two independent fixes:
+//     navigator.audioSession.type = 'playback' (Safari 16.4+/17+), re-asserted AFTER the context exists and every time audio
+//     (re)starts, plus a looping silent <audio> element started inside a real tap (the long-standing fallback: while an HTML
+//     media element plays, iOS uses the "playback" category for the whole page, so Web Audio is audible on silent too).
+//  2) Unlock: iOS only lets audio start from a REAL tap. touchstart/pointerdown do NOT count (touchend/pointerup/click/keydown do),
+//     so the context is only created + resumed (synchronously) inside those; touchstart/pointerdown merely re-wake an existing one.
+//  3) Interruptions (screen lock, app switch, call, Siri, YouTube, home-screen app resume): the context goes 'suspended' or
+//     'interrupted' → woken on the next tap, on visibility/pageshow/focus, and "Reset sound" in Settings rebuilds it from scratch.
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const AUD = { wanted:true, keep:null, keepOn:false, keepErr:'', taps:0, rebuilt:0, listeners:new Set() };
+function audioNotify(){ for (const f of AUD.listeners){ try { f(); } catch(e){} } }
+function sessionPlayback(){ try { const s = navigator.audioSession; if (s && s.type !== 'playback') s.type = 'playback'; } catch(e){} }
+function silentWav(){ const n = 4000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), str = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };   // 0.5 s of 8 kHz 8-bit silence
+  str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true); v.setUint16(34, 8, true); str(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44); let bin = ''; for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]); return 'data:audio/wav;base64,' + btoa(bin); }
+function keepAlive(){   // call ONLY from inside a real tap
+  if (!IOS || !AUD.wanted || document.hidden) return; let a = AUD.keep;
+  if (!a){ a = AUD.keep = document.createElement('audio'); a.src = silentWav(); a.loop = true; a.preload = 'auto'; a.setAttribute('playsinline', ''); a.setAttribute('webkit-playsinline', '');
+    a.setAttribute('x-webkit-airplay', 'deny'); a.disableRemotePlayback = true; a.setAttribute('aria-hidden', 'true');
+    a.addEventListener('playing', () => { AUD.keepOn = true; AUD.keepErr = ''; audioNotify(); }); a.addEventListener('pause', () => { AUD.keepOn = false; audioNotify(); }); }
+  if (a.paused){ try { const r = a.play(); if (r && r.catch) r.catch(e => { AUD.keepErr = e && e.name || 'blocked'; audioNotify(); }); } catch(e){ AUD.keepErr = e.name || 'error'; } } }
+function wake(){ if (AC && AC.state !== 'running' && AC.state !== 'closed'){ try { const r = AC.resume(); if (r && r.then) r.then(audioNotify, () => {}); } catch(e){} } }
 function ac(){
-  try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch(e){}   // play even with the ringer switch on silent
   if (AC && AC.state === 'closed') AC = null;
-  if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; AC = new C(); master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination); musicGain = AC.createGain(); musicGain.gain.value = .22; musicGain.connect(master); }
-  if (AC.state !== 'running'){ try { const r = AC.resume(); if (r && r.catch) r.catch(() => {}); } catch(e){} }
+  if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
+    try { AC = new C(); } catch(e){ return null; }
+    master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination); musicGain = AC.createGain(); musicGain.gain.value = .22; musicGain.connect(master); noiseBuf = null;
+    AC.onstatechange = audioNotify; }
+  wake(); sessionPlayback();   // same order as the original (pre-v11) code that played on silent: context first, then 'playback'
   return AC; }
 let audioPrimed = false;
-function unlockAudio(){ const c = ac(); if (!c) return;
-  if (!audioPrimed || c.state !== 'running'){ try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); audioPrimed = true; } catch(e){} } }   // a silent blip inside the gesture unlocks iOS
+function unlockAudio(e){
+  const real = !(e && (e.type === 'touchstart' || e.type === 'pointerdown'));   // iOS: only touchend/pointerup/click/keydown are real taps
+  if (!real){ wake(); return; }
+  if (!AUD.wanted && !AC) return;
+  AUD.taps++; const c = ac(); if (!c) return; keepAlive();
+  if (!audioPrimed || c.state !== 'running'){ try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); audioPrimed = true; } catch(err){} }   // a silent blip inside the tap unlocks iOS
+  audioNotify(); }
 ['touchend', 'pointerup', 'click', 'keydown', 'pointerdown', 'touchstart'].forEach(ev => addEventListener(ev, unlockAudio, { capture:true, passive:true }));
+// back from the lock screen / another app / a home-screen relaunch: try to wake right away (iOS may still wait for the next tap)
+document.addEventListener('visibilitychange', () => { if (document.hidden){ if (AUD.keep && !AUD.keep.paused) AUD.keep.pause(); } else if (AC){ wake(); sessionPlayback(); } });
+addEventListener('pageshow', () => { if (AC){ wake(); sessionPlayback(); } }); addEventListener('focus', () => { if (AC) wake(); });
+function audioStatus(){ const C = window.AudioContext || window.webkitAudioContext;
+  return { supported:!!C, state:AC ? AC.state : 'none', ios:IOS, session:navigator.audioSession ? navigator.audioSession.type : null, keepAlive:AUD.keepOn, keepErr:AUD.keepErr, wanted:AUD.wanted, taps:AUD.taps, rebuilt:AUD.rebuilt }; }
+function testSound(){ const c = ac(); if (!c) return audioStatus(); keepAlive(); const t0 = .03; [72, 76, 79, 84].forEach((m, i) => blip('square', mtof(m), mtof(m), .16, .22, t0 + i*.11)); return audioStatus(); }
+function resetAudio(){   // "Reset sound": throw the old context away and build a fresh one INSIDE this tap (fixes a context stuck silent after an interruption)
+  Music.stop(); Finale.stop(); const old = AC; AC = null; master = musicGain = null; noiseBuf = null; audioPrimed = false; AUD.rebuilt++;
+  if (old){ try { old.onstatechange = null; const r = old.close(); if (r && r.catch) r.catch(() => {}); } catch(e){} }
+  if (AUD.keep){ try { AUD.keep.pause(); AUD.keep.removeAttribute('src'); AUD.keep.load(); } catch(e){} AUD.keep = null; AUD.keepOn = false; }
+  unlockAudio({ type:'click' }); return testSound(); }
 let sfxOn = true, musicOn = true;
 function blip(type, f0, f1, dur, vol = .3, t0 = 0, dest){ const c = ac(); if (!c) return; const t = c.currentTime + t0, o = c.createOscillator(), g = c.createGain();
   o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
@@ -400,20 +439,44 @@ const SFX = {
 function sfx(n, inst){ if (!sfxOn || !ac()) return; if (n === 'shoot') (SHOOT[inst] || SHOOT.sax)(); else SFX[n] && SFX[n](); }
 const Music = {
   timer:null, next:0, step:0, song:null,
-  make(th, boss){ const m = th.music, R = rng(hash(th.key + (boss ? 'boss' : ''))), sc = m.minor ? [0,2,3,5,7,8,10] : [0,2,4,5,7,9,11];
+  make(th, boss){ if (boss && th.key === 'final') return { wiz:true, bpm:144 };   // Mr. Kurilla gets his own menacing track (wizTick)
+    const m = th.music, R = rng(hash(th.key + (boss ? 'boss' : ''))), sc = m.minor ? [0,2,3,5,7,8,10] : [0,2,4,5,7,9,11];
     const prog = boss ? (m.minor ? [0,0,5,4] : [0,3,4,4]) : (m.minor ? [0,5,2,6] : [0,4,5,3]);
     const mel = []; for (let i = 0; i < 64; i++){ const deg = prog[i >> 4]; mel.push(R() < (i % 2 ? .45 : .8) ? sc[(deg + [0,2,4,0,2,7][Math.floor(R()*6)]) % 7] + 12*(R() < .25 ? 1 : 0) : null); }
     return { root:m.root, sc, prog, mel, bpm:boss ? m.bpm + 16 : m.bpm, tango:m.tango }; },
-  start(th, boss){ this.stop(); if (!musicOn || !ac()) return; this.song = this.make(th, boss); this.next = AC.currentTime + .1; this.step = 0; this.timer = setInterval(() => this.tick(), 30); },
+  start(th, boss){ this.stop(); if (!musicOn || !ac()) return; sessionPlayback(); this.song = this.make(th, boss); this.next = AC.currentTime + .1; this.step = 0; this.timer = setInterval(() => this.tick(), 30); },
   stop(){ clearInterval(this.timer); this.timer = null; },
-  tick(){ const s = this.song, dt = 60/s.bpm/2; if (this.next < AC.currentTime - .25) this.next = AC.currentTime + .05;   // after an audio interruption: no burst of late notes
+  tick(){ const s = this.song; if (s.wiz) return this.wizTick(); const dt = 60/s.bpm/2; if (this.next < AC.currentTime - .25) this.next = AC.currentTime + .05;   // after an audio interruption: no burst of late notes
     while (this.next < AC.currentTime + .15){ const i = this.step % 64, deg = s.prog[i >> 4], t0 = this.next - AC.currentTime, chordRoot = s.root - 24 + s.sc[deg];
       const bassHit = s.tango ? [1,0,0,1,0,1,1,0][i % 8] : (i % 2 === 0);
       if (bassHit) blip('triangle', mtof(chordRoot + (i % 4 === 2 ? 7 : 0)), mtof(chordRoot + (i % 4 === 2 ? 7 : 0)), dt*.9, .5, t0, musicGain);
       if (s.mel[i] !== null) blip('square', mtof(s.root + 12 + s.mel[i]), mtof(s.root + 12 + s.mel[i]), dt*.8, .12, t0, musicGain);
       if (i % 2 === 1) blip('square', mtof(s.root + s.sc[(deg + 2 + (i % 4 === 1 ? 0 : 2)) % 7]), mtof(s.root + s.sc[(deg + 2) % 7]), dt*.4, .05, t0, musicGain);
       this.next += dt; this.step++; } },
+  // Mr. Kurilla's battle music: D minor, i–VI–iv–V (Dm Bb Gm A), a low chromatic bass ostinato under church-organ chords and timpani.
+  // It intensifies with his phase: 1 = ostinato + organ + timpani (a creeping half-time melody), 2 = faster + the chromatic melody + hi-hats
+  // + more timpani, 3 = fastest, melody doubled an octave down, snare backbeat and timpani rolls into every chord change.
+  wizTick(){ const ph = (G && G.B && G.B.phase) || 1, dt = 60/[0, 144, 156, 172][ph]/2;
+    if (this.next < AC.currentTime - .25) this.next = AC.currentTime + .05;
+    while (this.next < AC.currentTime + .15){ const i = this.step % 64, ch = WIZ_CHORDS[i >> 4], t0 = this.next - AC.currentTime, r = ch[0] - 12, m = WIZ_MEL[i];
+      if (i % 8 === 0) organ(ch, t0, dt*8*.95, ph === 3 ? .05 : .04);
+      const b = r + [0, 0, 12, 0, 1, 0, -1, 0][i % 8]; blip('triangle', mtof(b), mtof(b), dt*.85, .45, t0, musicGain); blip('square', mtof(b + 12), mtof(b + 12), dt*.45, ph > 1 ? .06 : .045, t0, musicGain);
+      if (i % 16 === 0) timp(r, t0, .5); if (ph > 1 && i % 16 === 8) timp(r - 5, t0, .4);
+      if (ph === 3 && i % 16 >= 14){ timp(r, t0, .3); timp(r, t0 + dt/2, .32); }
+      if (m){ if (ph === 1){ if (i % 4 === 0) blip('triangle', mtof(m), mtof(m), dt*1.8, .12, t0, musicGain); }
+        else { blip('square', mtof(m), mtof(m), dt*.9, .085, t0, musicGain); if (ph === 3) blip('sawtooth', mtof(m - 12), mtof(m - 12), dt*.9, .045, t0, musicGain); } }
+      if (ph > 1) noise(.03, .06, t0, 7000, musicGain); if (ph === 3 && i % 4 === 2) noise(.1, .2, t0, 1500, musicGain);
+      this.next += dt; this.step++; } },
 };
+const WIZ_CHORDS = [[50, 53, 57], [46, 50, 53], [43, 46, 50], [45, 49, 52]];   // Dm, Bb, Gm, A (the C# leading tone keeps it tense)
+const WIZ_MEL = [74,0,73,0,72,0,71,0, 70,0,69,0,70,69,68,69,  74,0,0,77,76,0,74,0, 73,0,74,0,70,0,0,0,
+                 79,0,78,0,77,0,76,0, 75,0,74,0,75,74,73,74,  76,0,0,73,76,0,79,0, 81,0,80,0,79,0,77,76];   // creeping chromatic lines (0 = rest)
+function organ(notes, t0, dur, vol){ const c = ac(); if (!c) return; const t = c.currentTime + t0, g = c.createGain();   // drawbar-style organ: each note + octave + twelfth
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .03); g.gain.setValueAtTime(vol, t + dur - .08); g.gain.exponentialRampToValueAtTime(.0001, t + dur); g.connect(musicGain);
+  for (const n of notes) for (const [mul, v] of [[1, 1], [2, .55], [3, .3]]){ const o = c.createOscillator(), og = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(mtof(n)*mul, t); og.gain.value = v; o.connect(og).connect(g); o.start(t); o.stop(t + dur + .02); } }
+function timp(m, t0, vol){ const c = ac(); if (!c) return; const t = c.currentTime + t0, f = mtof(m), o = c.createOscillator(), g = c.createGain();   // timpani: pitch-drop boom + a soft mallet thump
+  o.type = 'sine'; o.frequency.setValueAtTime(f*1.25, t); o.frequency.exponentialRampToValueAtTime(f, t + .06); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + .55);
+  o.connect(g).connect(musicGain); o.start(t); o.stop(t + .6); noise(.05, vol*.35, t0, 300, musicGain); }
 
 // ---------- FINAL BOSS: Mr. Kurilla, the Maestro (a friendly "villain" wizard) ----------
 // Floats between a few spots, telegraphs every spell (staff glows + sparkles + "!" for ~0.7-0.95 s), teleports with a fade (no contact while faded),
@@ -422,7 +485,7 @@ const Music = {
 const WIZ_SPOTS = [[2.2, 44], [11.4, 44], [6.8, 30], [3, 82], [11, 82], [6.8, 64]];
 const WIZ_SPELLS = { 1:['volley', 'volley', 'volley'], 2:['volley', 'rain', 'volley'], 3:['rain', 'volley', 'whole'] };
 function finalTheme(){ const th = themeOf({ theme:'castle', colors:{ sky:'#3a1a6e', ground:'#4a2a7a', groundTop:'#c9b6ff', accent:'#ffd23f' } });
-  return Object.assign(th, { key:'final', id:'final-tower', music:{ root:60, minor:false, bpm:132 } }); }
+  return Object.assign(th, { key:'final', id:'final-tower', music:{ root:50, minor:true, bpm:144 } }); }
 function updateWizard(B, dt, p, left, right, floor, hpF){
   const phase = hpF > 2/3 ? 1 : hpF > 1/3 ? 2 : 3, tempo = [1, 1, 1.15, 1.3][phase]; B.phase = phase;
   if (!B.mode){ B.mode = 'float'; B.spot = 5; B.casts = 0; B.timer = 1; }
@@ -841,7 +904,7 @@ function damageBoss(n, force){ const B = G.B; if ((B.inv > 0 && !force) || B.gon
   if (before > B.maxHp/2 && B.hp <= B.maxHp/2) G.pickups.push({ x:7.5*TS, y:20, vy:0 });
   if (B.hp <= 0){ B.gone = 2; G.eshots = []; Music.stop(); sfx('boom'); G.shake = .6; G.enemies.forEach(e => e.alive && kill(e)); } }
 function finish(kind){ if (G.done) return; G.done = true; Music.stop(); releaseInput(); const o = G.opts, r = { coins:G.coins, lives:G.lives, bossHp:G.B ? G.B.hp : 0, tuba:G.p.dead ? 0 : G.tuba, tubaKO:G.tubaKO };
-  setTimeout(() => { stop(); if (kind === 'clear') o.onClear && o.onClear(r); else if (kind === 'gameover') o.onGameOver && o.onGameOver(r); else o.onQuit && o.onQuit(r); }, kind === 'clear' ? 200 : 600); }
+  const run = G; setTimeout(() => { if (G === run) stop(); if (kind === 'clear') o.onClear && o.onClear(r); else if (kind === 'gameover') o.onGameOver && o.onGameOver(r); else o.onQuit && o.onQuit(r); }, kind === 'clear' ? 200 : 600); }
 
 // ---------- render ----------
 let ctx = null;
@@ -1123,6 +1186,7 @@ function drawOverworld(canvas, worlds, opts = {}){
   return hits;
 }
 
-window.PQGame = { SPECIAL, SHIP, finale:{ start:on => Finale.start(on), stop:() => Finale.stop(), get playing(){ return !!Finale.timer; } }, start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
-  debug:{ get G(){ return G; }, get audio(){ return AC; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); }, draw(){ if (G) draw(); } } };
+window.PQGame = { SPECIAL, SHIP, audio:{ ctx:() => ac(), want(on){ AUD.wanted = !!on; if (!on && AUD.keep && !AUD.keep.paused) AUD.keep.pause(); }, status:audioStatus, test:testSound, reset:resetAudio, onChange(f){ AUD.listeners.add(f); return () => AUD.listeners.delete(f); } },
+  finale:{ start:on => Finale.start(on), stop:() => Finale.stop(), get playing(){ return !!Finale.timer; } }, start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
+  debug:{ get G(){ return G; }, get audio(){ return AC; }, get music(){ return { playing:!!Music.timer, wiz:!!(Music.song && Music.song.wiz), step:Music.step }; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); }, draw(){ if (G) draw(); } } };
 })();

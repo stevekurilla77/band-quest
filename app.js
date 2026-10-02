@@ -85,11 +85,11 @@ const pad = n => String(n).padStart(2,'0');
 const today = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const fmtDate = k => { const [y,m,d] = k.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString(undefined,{month:'short',day:'numeric'}); };
 
-// ---------- UI sound blips (the game itself has its own chiptune engine) ----------
-let AC = null;
-function audio(){ if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; AC = new C(); }
-  if (AC.state !== 'running'){ try { const r = AC.resume(); if (r && r.catch) r.catch(() => {}); } catch(e){} } return AC; }   // iOS: also wake from 'interrupted'
-['touchend', 'click', 'keydown'].forEach(ev => addEventListener(ev, () => { if (AC && AC.state !== 'running') audio(); }, { capture:true, passive:true }));
+// ---------- UI sound blips ----------
+// They share the game's ONE AudioContext (PQGame.audio), which owns all the iPhone unlock / silent-switch / wake-up handling.
+// (Before v19 the menus had a second context of their own; iOS handles one context far more reliably.)
+const audio = () => window.PQGame && PQGame.audio ? PQGame.audio.ctx() : null;
+const audioWant = () => { if (window.PQGame && PQGame.audio) PQGame.audio.want(S.sound || S.music); };
 function tone(freq, t0, dur, type='square', vol=.2){
   const c = audio(); if (!c) return; const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + t0;
   o.type = type; o.frequency.setValueAtTime(freq, t); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t+.01); g.gain.exponentialRampToValueAtTime(.0001, t+dur);
@@ -403,7 +403,7 @@ function finaleCast(){
     { title:'STARRING', cols:1, list:[{ kind:'hero', inst, hair, gold:PIECES.some(p => gw(p.id).golden), big:true, name:plain(S.name) || 'You' }] },
     { title:'THE BAND', cols:3, list:Object.keys(INST_NAME).map((k, i) => ({ kind:'hero', inst:k, hair:i % 2 ? 'long' : 'short', name:INST_NAME[k] })) },
     { title:'WORLD BADDIES', cols:3, list:ens.map(k => ({ kind:'enemy', type:k, name:ENEMY_NAME[k] || plain(k) })) },
-    { title:'TROUBLEMAKERS', cols:2, list:[['dino', 'Mr. Dinosaur'], ['meep', 'Meep'], ['dragon', 'Sparky the Dragon'], ['hedgehog', 'Hedgehog Archer']].map(([type, name]) => ({ kind:'enemy', type, name })) },
+    { title:'TROUBLEMAKERS', cols:2, list:[['dino', 'Mr. Dinosaur'], ['meep', 'Meep'], ['dragon', 'Burney'], ['hedgehog', 'Hedgehog Archer']].map(([type, name]) => ({ kind:'enemy', type, name })) },
     { title:'THE BOSSES', cols:3, list:bos.map(k => ({ kind:'boss', type:k, name:bossName(k) })) },
     ...(guests.length ? [{ title:'SPECIAL GUESTS', cols:2, list:guests }] : []),
     { title:'AND THE MAESTRO', cols:2, list:[{ kind:'wizard', name:'Mr. Kurilla' }, { kind:'drum', name:'The Golden Snare' }] },
@@ -423,7 +423,7 @@ $('#finale-again').onclick = () => { if (!fin) return; const first = fin.first; 
 $('#btn-pause').onclick = () => PQGame.togglePause();
 $('#pm-resume').onclick = () => PQGame.togglePause(false);
 $('#pm-quit').onclick = () => { if (confirm('Quit this stage and go back to the map?')) PQGame.quit(); };
-$('#pm-music').onclick = () => { S.music = !S.music; save(); $('#pm-music').textContent = `🎵 Music: ${S.music?'on':'off'}`; toast('Music change applies next stage.'); };
+$('#pm-music').onclick = () => { S.music = !S.music; save(); audioWant(); $('#pm-music').textContent = `🎵 Music: ${S.music?'on':'off'}`; toast('Music change applies next stage.'); };
 $('#hero-btn').onclick = () => heroPicker();
 
 // ---------- Badges & settings (modals) ----------
@@ -433,9 +433,23 @@ $('#badges-btn').onclick = () => {
     <div class="stats">${[[starsDone() + '/' + PIECES.length*4,'Cleared ⭐'],[PIECES.filter(p => gw(p.id).boss > 0).length,'Bosses'],[S.game.coins,'Note coins']].map(([v,l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
     <div class="badge-grid">${BADGES.map(b => { const g = S.badges[b.id]; return `<div class="badge ${g?'':'locked'}"><div class="be">${b.e}</div><div class="bn">${b.n}</div><div class="bd">${g?'Earned '+fmtDate(g):b.d}</div></div>`; }).join('')}</div>`);
 };
+// Settings → sound check: shows whether the game's audio is actually running, with Test / Reset buttons for phones
+let scStop = null;
+function soundCheck(body){
+  const el = body.querySelector('#snd-status'), tip = body.querySelector('#snd-tip'); if (!el) return; const a = PQGame.audio.status();
+  const live = a.state === 'running';
+  el.className = 'sc-status ' + (!a.supported ? 'bad' : live ? 'good' : 'warn');
+  el.textContent = !a.supported ? '🔇 This browser can’t play game sound' : !S.sound && !S.music ? '🔇 Sound effects and music are both OFF (turn them on below)'
+    : live ? `🔊 Sound: on ✓${S.sound ? '' : ' (effects off)'}${S.music ? '' : ' (music off)'}` : '🔇 Sound: tap “Test sound” to enable';
+  tip.innerHTML = a.ios ? `📱 iPhone/iPad: game sound now plays even with the silent switch on${a.keepAlive ? ' ✓' : ''}. No chime? Turn the volume up with the side buttons, close any YouTube video, then tap <b>Reset sound</b>.`
+    : 'No chime? Check the device volume, then tap <b>Reset sound</b>.';
+}
 function settings(){
   openModal(`<h2 class="pick-title">⚙️ Settings</h2><div class="settings">
     <button id="rename-btn" class="btn btn-wide btn-ghost">✏️ Change nickname</button>
+    <div class="sound-check" id="sound-check"><div class="sc-status" id="snd-status" role="status" aria-live="polite"></div>
+      <div class="sc-row"><button id="snd-test" class="btn btn-yellow">🔔 Test sound</button><button id="snd-reset" class="btn btn-ghost">🛠️ Reset sound</button></div>
+      <p class="hint sc-tip" id="snd-tip"></p></div>
     <button id="sound-btn" class="btn btn-wide btn-ghost">🔊 Sound effects: ${S.sound?'on':'off'}</button>
     <button id="music-btn" class="btn btn-wide btn-ghost">🎵 Music: ${S.music?'on':'off'}</button>
     <button id="backup-btn" class="btn btn-wide btn-ghost">💾 Copy backup code (new phone?)</button>
@@ -446,8 +460,12 @@ function settings(){
     <p class="hint">🔒 No accounts, no tracking, nothing leaves this device. Progress is saved in this browser only. Recordings open in YouTube’s privacy-enhanced (no-cookie) player only when you tap 🎧.</p>
     <p class="hint">All game art and sounds are original. Music recordings belong to their composers and publishers and are linked from official YouTube channels.</p></div>`, body => {
     body.querySelector('#rename-btn').onclick = () => { const n = prompt('New nickname or first name (no last names):', S.name); if (n && n.trim()){ S.name = cleanName(n); save(); renderAll(); } };
-    body.querySelector('#sound-btn').onclick = () => { S.sound = !S.sound; save(); settings(); };
-    body.querySelector('#music-btn').onclick = () => { S.music = !S.music; save(); settings(); };
+    body.querySelector('#sound-btn').onclick = () => { S.sound = !S.sound; save(); audioWant(); settings(); };
+    body.querySelector('#music-btn').onclick = () => { S.music = !S.music; save(); audioWant(); settings(); };
+    if (scStop) scStop(); const paint = () => soundCheck(body); paint(); const off = PQGame.audio.onChange(paint), t = setInterval(paint, 700);
+    scStop = () => { off(); clearInterval(t); scStop = null; }; modalClose = () => scStop && scStop();
+    body.querySelector('#snd-test').onclick = () => { PQGame.audio.test(); setTimeout(paint, 250); };
+    body.querySelector('#snd-reset').onclick = () => { PQGame.audio.reset(); setTimeout(paint, 250); toast('🛠️ Sound was reset. Did you hear the chime?'); };
     body.querySelector('#reset-btn').onclick = () => { if (confirm('Erase ALL game progress on this device? This cannot be undone.')){ localStorage.removeItem(KEY); location.reload(); } };
     body.querySelector('#backup-btn').onclick = async () => { const code = 'PQ1:' + btoa(unescape(encodeURIComponent(JSON.stringify(S))));
       try { await navigator.clipboard.writeText(code); toast('💾 Backup code copied! Paste it somewhere safe (like a note).'); }
@@ -468,6 +486,7 @@ addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e;
 
 // ---------- Boot ----------
 function startApp(){
+  audioWant();
   $('#screen-welcome').hidden = true; ['#hud','#main'].forEach(s => $(s).hidden = false);
   renderAll(); startMapLoop();
   if (memOnly) toast('⚠️ This browser is blocking storage (private mode?). Progress won’t be saved.');
@@ -484,7 +503,9 @@ if (new URLSearchParams(location.search).has('teacher')){
 }
 $('#welcome-form').onsubmit = e => { e.preventDefault(); const n = cleanName($('#nick').value); if (!n) return; S.name = n; save(); startApp(); confetti(40); };
 if (S.name) startApp(); else $('#screen-welcome').hidden = false;
-if ('serviceWorker' in navigator && location.protocol !== 'file:') addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+// (this code runs after an await, so the page's 'load' event has usually ALREADY fired: register now in that case, otherwise on load)
+if ('serviceWorker' in navigator && location.protocol !== 'file:'){ const reg = () => navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if (document.readyState === 'complete') reg(); else addEventListener('load', reg); }
 window.__PQ = { get state(){ return S; }, PIECES, listenTick, openStory, playEnding, finaleCast, finaleStep(sec){ if (fin) for (let i = 0; i < sec*30; i++) fin.ctl.step(1/30); },
   get finale(){ return { story:story && { n:story.n, lines:story.lines.length, ready:story.ready, who:story.ctl.state.who, drum:story.ctl.state.drum },
     credits:fin && { phase:fin.ctl.state.phase, t:fin.ctl.state.t, total:fin.ctl.total, shown:[...fin.ctl.state.shown], cast:fin.cast.map(g => g.list.map(c => c.name)).flat() }, music:PQGame.finale.playing }; }, get listen(){ return listen && { id:listen.id, api:listen.api, playing:listen.playing }; } };
