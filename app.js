@@ -202,7 +202,7 @@ function renderAll(){ renderHUD(); renderMap(); }
 
 // ---------- World screen (stage list + "Hear the piece") ----------
 function stagesHTML(id){
-  const w = gw(id), rows = [0,1,2,3].map(i => { const st = stageState(id, i), done = i < 3 ? w.cleared[i] : w.boss > 0, name = i < 3 ? `Stage ${i+1}` : '🏰 Boss Castle';
+  const w = gw(id), rows = [0,1,2,3].map(i => { const st = stageState(id, i), done = i < 3 ? w.cleared[i] : w.boss > 0, sp = i < 3 && window.PQGame && PQGame.SPECIAL && (PQGame.SPECIAL[id] || {})[i], name = i < 3 ? `Stage ${i+1}${sp === 'ship' ? ' · 🏴‍☠️ Pirate Ship' : ''}` : '🏰 Boss Castle';
     return `<div class="stage ${st.open?'':'locked'} ${done?'done':''}"><div><b>${done?'⭐':st.open?'▶':'🔒'} ${name}</b>${st.open?'':`<div class="why">${esc(st.why)}</div>`}${done?`<div class="why">Best: ${w.best[i]} notes${i===3&&w.boss>1?` · beaten ×${w.boss}`:''}</div>`:''}</div>
       ${st.open?`<button class="btn ${i===3?'btn-pink':'btn-yellow'} play-btn" data-play="${id}" data-stage="${i}">${done?'REPLAY':'PLAY'}</button>`:''}</div>`; }).join('');
   return `<div class="stages"><div class="lbl">🎮 Stages · ❤️ ${S.game.lives} lives</div>${rows}</div>`;
