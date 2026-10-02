@@ -440,8 +440,10 @@ function soundCheck(body){
   const live = a.state === 'running';
   el.className = 'sc-status ' + (!a.supported ? 'bad' : live ? 'good' : 'warn');
   el.textContent = !a.supported ? '🔇 This browser can’t play game sound' : !S.sound && !S.music ? '🔇 Sound effects and music are both OFF (turn them on below)'
+    : a.needRebuild ? '🎧 Audio changed (earbuds/Bluetooth?): tap “Test sound”'
     : live ? `🔊 Sound: on ✓${S.sound ? '' : ' (effects off)'}${S.music ? '' : ' (music off)'}` : '🔇 Sound: tap “Test sound” to enable';
-  tip.innerHTML = a.ios ? `📱 iPhone/iPad: game sound now plays even with the silent switch on${a.keepAlive ? ' ✓' : ''}. No chime? Turn the volume up with the side buttons, close any YouTube video, then tap <b>Reset sound</b>.`
+  if (a.needRebuild && el.className.includes('good')) el.className = 'sc-status warn';
+  tip.innerHTML = a.ios ? '📱 iPhone/iPad: game sound plays even with the silent switch on while Band Quest is open, and the game lets go of the sound as soon as you leave it. Plugged in earbuds or Bluetooth? The game switches over on your next tap. No chime? Turn the volume up with the side buttons, then tap <b>Reset sound</b>.'
     : 'No chime? Check the device volume, then tap <b>Reset sound</b>.';
 }
 function settings(){

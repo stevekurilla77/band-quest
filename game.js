@@ -351,57 +351,77 @@ function genShip(foe = 'wisp'){
 
 // ---------- audio: chiptune SFX + tiny original music sequencer ----------
 let AC = null, master = null, musicGain = null;
-// iPhone audio (v19). Three separate iOS problems, three fixes:
-//  1) Silent (ring/silent switch ON): iOS treats plain Web Audio as "ambient" sound and MUTES it. Two independent fixes:
-//     navigator.audioSession.type = 'playback' (Safari 16.4+/17+), re-asserted AFTER the context exists and every time audio
-//     (re)starts, plus a looping silent <audio> element started inside a real tap (the long-standing fallback: while an HTML
-//     media element plays, iOS uses the "playback" category for the whole page, so Web Audio is audible on silent too).
-//  2) Unlock: iOS only lets audio start from a REAL tap. touchstart/pointerdown do NOT count (touchend/pointerup/click/keydown do),
-//     so the context is only created + resumed (synchronously) inside those; touchstart/pointerdown merely re-wake an existing one.
-//  3) Interruptions (screen lock, app switch, call, Siri, YouTube, home-screen app resume): the context goes 'suspended' or
-//     'interrupted' → woken on the next tap, on visibility/pageshow/focus, and "Reset sound" in Settings rebuilds it from scratch.
+// iPhone audio (v20). Goals: sound with the silent switch on WHILE Band Quest is on screen, and never get in the way of the rest of the phone.
+//  • Silent switch: navigator.audioSession.type = 'playback' (Safari 16.4+/17+), set only while the game is VISIBLE and sound is wanted.
+//    Older iPhones without that API get one short silent clip (not a loop) played inside a tap.
+//    (v19's endless silent <audio> loop is gone: a looping media element can hog the phone's audio and the headphone route.)
+//  • Unlock: the context is only created/resumed (synchronously) inside a REAL tap (touchend/pointerup/click/keydown). touchstart doesn't count on iOS.
+//  • Letting go: when the app is hidden (home button, app switch, lock, pagehide) the context is SUSPENDED and the session goes back to 'auto',
+//    so other apps, calls, earbuds and Bluetooth work normally. It wakes on return / the next tap.
+//  • Audio route changes (earbuds/headphones/Bluetooth plugged in or out = 'devicechange', or an 'interrupted' context): the old context can
+//    stay stuck on the old route, so it is closed and a fresh one is built on the next tap; any music that was playing carries on.
+//  • Settings → Reset sound fully releases everything and rebuilds from scratch inside the tap.
 const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const AUD = { wanted:true, keep:null, keepOn:false, keepErr:'', taps:0, rebuilt:0, listeners:new Set() };
+const AUD = { wanted:true, released:false, needRebuild:false, routeChanges:0, rebuilt:0, taps:0, kicks:0, why:'', listeners:new Set(), checkT:0 };
 function audioNotify(){ for (const f of AUD.listeners){ try { f(); } catch(e){} } }
-function sessionPlayback(){ try { const s = navigator.audioSession; if (s && s.type !== 'playback') s.type = 'playback'; } catch(e){} }
-function silentWav(){ const n = 4000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), str = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };   // 0.5 s of 8 kHz 8-bit silence
-  str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
-  v.setUint16(32, 1, true); v.setUint16(34, 8, true); str(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44); let bin = ''; for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]); return 'data:audio/wav;base64,' + btoa(bin); }
-function keepAlive(){   // call ONLY from inside a real tap
-  if (!IOS || !AUD.wanted || document.hidden) return; let a = AUD.keep;
-  if (!a){ a = AUD.keep = document.createElement('audio'); a.src = silentWav(); a.loop = true; a.preload = 'auto'; a.setAttribute('playsinline', ''); a.setAttribute('webkit-playsinline', '');
-    a.setAttribute('x-webkit-airplay', 'deny'); a.disableRemotePlayback = true; a.setAttribute('aria-hidden', 'true');
-    a.addEventListener('playing', () => { AUD.keepOn = true; AUD.keepErr = ''; audioNotify(); }); a.addEventListener('pause', () => { AUD.keepOn = false; audioNotify(); }); }
-  if (a.paused){ try { const r = a.play(); if (r && r.catch) r.catch(e => { AUD.keepErr = e && e.name || 'blocked'; audioNotify(); }); } catch(e){ AUD.keepErr = e.name || 'error'; } } }
-function wake(){ if (AC && AC.state !== 'running' && AC.state !== 'closed'){ try { const r = AC.resume(); if (r && r.then) r.then(audioNotify, () => {}); } catch(e){} } }
+function sessionSet(type){ try { const s = navigator.audioSession; if (s && s.type !== type) s.type = type; } catch(e){} }
+function sessionPlayback(){ if (!document.hidden && AUD.wanted && !AUD.released) sessionSet('playback'); }
+let kickUrl = null;
+function silentKick(){   // older iOS (no audioSession API): one short silent clip inside a tap, then it's gone — no loop, nothing held
+  if (!IOS || navigator.audioSession || document.hidden) return;
+  if (!kickUrl){ const n = 2400, b = new Uint8Array(44 + n), v = new DataView(b.buffer), str = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };   // 0.3 s of 8 kHz 8-bit silence
+    str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+    v.setUint16(32, 1, true); v.setUint16(34, 8, true); str(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44); let bin = ''; for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]); kickUrl = 'data:audio/wav;base64,' + btoa(bin); }
+  try { const a = document.createElement('audio'); a.src = kickUrl; a.loop = false; a.setAttribute('playsinline', ''); a.setAttribute('webkit-playsinline', ''); a.setAttribute('x-webkit-airplay', 'deny');
+    const done = () => { try { a.pause(); a.removeAttribute('src'); a.load(); } catch(e){} }; a.addEventListener('ended', done, { once:true }); a.addEventListener('error', done, { once:true });
+    const r = a.play(); AUD.kicks++; if (r && r.catch) r.catch(done); setTimeout(done, 1500); } catch(e){} }
+function wake(){ if (document.hidden || AUD.released) return; if (AC && AC.state !== 'running' && AC.state !== 'closed'){ try { const r = AC.resume(); if (r && r.then) r.then(audioNotify, () => {}); } catch(e){} } }
 function ac(){
   if (AC && AC.state === 'closed') AC = null;
-  if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
+  if (!AC){ if (document.hidden) return null; const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
     try { AC = new C(); } catch(e){ return null; }
     master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination); musicGain = AC.createGain(); musicGain.gain.value = .22; musicGain.connect(master); noiseBuf = null;
-    AC.onstatechange = audioNotify; }
-  wake(); sessionPlayback();   // same order as the original (pre-v11) code that played on silent: context first, then 'playback'
+    const mine = AC; AC.onstatechange = () => { if (AC === mine && mine.state === 'interrupted' && !document.hidden) routeChanged('interrupted'); audioNotify(); }; }
+  wake(); sessionPlayback();   // context first, then 'playback' (the order the original pre-v11 code used)
   return AC; }
+// Something changed the audio route (earbuds in/out, Bluetooth, a call...): stop holding anything; rebuild on the next tap.
+function routeChanged(why){ AUD.needRebuild = true; AUD.routeChanges++; AUD.why = why; audioNotify(); }
+try { if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => routeChanged('devicechange')); } catch(e){}
+// Throw the old context away and build a fresh one (only ever called inside a tap). Music/finale song that was playing carries on.
+function rebuildAudio(why){
+  const music = !!Music.timer, fin = !!Finale.timer; Music.stop(); Finale.stop();
+  const old = AC; AC = null; master = musicGain = null; noiseBuf = null; audioPrimed = false; AUD.rebuilt++; AUD.needRebuild = false; AUD.why = why || AUD.why;
+  if (old){ try { old.onstatechange = null; const r = old.close(); if (r && r.catch) r.catch(() => {}); } catch(e){} }
+  sessionSet('auto'); const c = ac(); if (!c) return null; prime(c); silentKick();
+  if (music) Music.resume(); if (fin) Finale.start(true); return c; }
+function prime(c){ try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); audioPrimed = true; } catch(err){} }   // a silent blip inside the tap unlocks iOS
 let audioPrimed = false;
 function unlockAudio(e){
   const real = !(e && (e.type === 'touchstart' || e.type === 'pointerdown'));   // iOS: only touchend/pointerup/click/keydown are real taps
+  if (document.hidden) return;
   if (!real){ wake(); return; }
+  AUD.released = false;
   if (!AUD.wanted && !AC) return;
-  AUD.taps++; const c = ac(); if (!c) return; keepAlive();
-  if (!audioPrimed || c.state !== 'running'){ try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); audioPrimed = true; } catch(err){} }   // a silent blip inside the tap unlocks iOS
+  AUD.taps++;
+  if (AUD.needRebuild && AC){ rebuildAudio(); audioNotify(); return; }
+  const fresh = !AC, c = ac(); if (!c) return;
+  if (fresh) silentKick();
+  if (!audioPrimed || c.state !== 'running') prime(c);
+  if (c.state !== 'running'){ clearTimeout(AUD.checkT); AUD.checkT = setTimeout(() => { if (AC === c && c.state !== 'running' && !document.hidden) routeChanged('stuck'); }, 600); }   // still not running → rebuild next tap
   audioNotify(); }
 ['touchend', 'pointerup', 'click', 'keydown', 'pointerdown', 'touchstart'].forEach(ev => addEventListener(ev, unlockAudio, { capture:true, passive:true }));
-// back from the lock screen / another app / a home-screen relaunch: try to wake right away (iOS may still wait for the next tap)
-document.addEventListener('visibilitychange', () => { if (document.hidden){ if (AUD.keep && !AUD.keep.paused) AUD.keep.pause(); } else if (AC){ wake(); sessionPlayback(); } });
-addEventListener('pageshow', () => { if (AC){ wake(); sessionPlayback(); } }); addEventListener('focus', () => { if (AC) wake(); });
+// Leaving the app (or the page): suspend, and hand the audio session back to iOS, so nothing is held while Band Quest is in the background.
+function releaseAudio(){ AUD.released = true; clearTimeout(AUD.checkT); if (AC && AC.state === 'running'){ try { const r = AC.suspend(); if (r && r.catch) r.catch(() => {}); } catch(e){} } sessionSet('auto'); audioNotify(); }
+function returnAudio(){ if (document.hidden) return; AUD.released = false; if (AC && !AUD.needRebuild){ wake(); sessionPlayback(); } audioNotify(); }
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAudio(); else returnAudio(); });
+addEventListener('pagehide', releaseAudio); addEventListener('pageshow', returnAudio);
 function audioStatus(){ const C = window.AudioContext || window.webkitAudioContext;
-  return { supported:!!C, state:AC ? AC.state : 'none', ios:IOS, session:navigator.audioSession ? navigator.audioSession.type : null, keepAlive:AUD.keepOn, keepErr:AUD.keepErr, wanted:AUD.wanted, taps:AUD.taps, rebuilt:AUD.rebuilt }; }
-function testSound(){ const c = ac(); if (!c) return audioStatus(); keepAlive(); const t0 = .03; [72, 76, 79, 84].forEach((m, i) => blip('square', mtof(m), mtof(m), .16, .22, t0 + i*.11)); return audioStatus(); }
-function resetAudio(){   // "Reset sound": throw the old context away and build a fresh one INSIDE this tap (fixes a context stuck silent after an interruption)
-  Music.stop(); Finale.stop(); const old = AC; AC = null; master = musicGain = null; noiseBuf = null; audioPrimed = false; AUD.rebuilt++;
-  if (old){ try { old.onstatechange = null; const r = old.close(); if (r && r.catch) r.catch(() => {}); } catch(e){} }
-  if (AUD.keep){ try { AUD.keep.pause(); AUD.keep.removeAttribute('src'); AUD.keep.load(); } catch(e){} AUD.keep = null; AUD.keepOn = false; }
-  unlockAudio({ type:'click' }); return testSound(); }
+  return { supported:!!C, state:AC ? AC.state : 'none', ios:IOS, session:navigator.audioSession ? navigator.audioSession.type : null, wanted:AUD.wanted, released:AUD.released,
+    needRebuild:AUD.needRebuild, routeChanges:AUD.routeChanges, why:AUD.why, rebuilt:AUD.rebuilt, taps:AUD.taps, kicks:AUD.kicks, music:!!Music.timer }; }
+function testSound(){ AUD.released = false; const c = AUD.needRebuild && AC ? rebuildAudio() : ac(); if (!c) return audioStatus(); if (!audioPrimed) prime(c);
+  [72, 76, 79, 84].forEach((m, i) => blip('square', mtof(m), mtof(m), .16, .22, .03 + i*.11)); return audioStatus(); }
+function resetAudio(){ AUD.released = false; rebuildAudio('reset'); return testSound(); }   // "Reset sound": full release + rebuild inside this tap
+function wantAudio(on){ AUD.wanted = !!on; if (!on) sessionSet('auto'); else if (AC) sessionPlayback(); audioNotify(); }   // never claim the session before a tap made a context
 let sfxOn = true, musicOn = true;
 function blip(type, f0, f1, dur, vol = .3, t0 = 0, dest){ const c = ac(); if (!c) return; const t = c.currentTime + t0, o = c.createOscillator(), g = c.createGain();
   o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
@@ -445,6 +465,7 @@ const Music = {
     const mel = []; for (let i = 0; i < 64; i++){ const deg = prog[i >> 4]; mel.push(R() < (i % 2 ? .45 : .8) ? sc[(deg + [0,2,4,0,2,7][Math.floor(R()*6)]) % 7] + 12*(R() < .25 ? 1 : 0) : null); }
     return { root:m.root, sc, prog, mel, bpm:boss ? m.bpm + 16 : m.bpm, tango:m.tango }; },
   start(th, boss){ this.stop(); if (!musicOn || !ac()) return; sessionPlayback(); this.song = this.make(th, boss); this.next = AC.currentTime + .1; this.step = 0; this.timer = setInterval(() => this.tick(), 30); },
+  resume(){ if (!this.song || !musicOn || !ac()) return; this.stop(); this.next = AC.currentTime + .1; this.timer = setInterval(() => this.tick(), 30); },   // after an audio rebuild: same song, new context
   stop(){ clearInterval(this.timer); this.timer = null; },
   tick(){ const s = this.song; if (s.wiz) return this.wizTick(); const dt = 60/s.bpm/2; if (this.next < AC.currentTime - .25) this.next = AC.currentTime + .05;   // after an audio interruption: no burst of late notes
     while (this.next < AC.currentTime + .15){ const i = this.step % 64, deg = s.prog[i >> 4], t0 = this.next - AC.currentTime, chordRoot = s.root - 24 + s.sc[deg];
@@ -1186,7 +1207,7 @@ function drawOverworld(canvas, worlds, opts = {}){
   return hits;
 }
 
-window.PQGame = { SPECIAL, SHIP, audio:{ ctx:() => ac(), want(on){ AUD.wanted = !!on; if (!on && AUD.keep && !AUD.keep.paused) AUD.keep.pause(); }, status:audioStatus, test:testSound, reset:resetAudio, onChange(f){ AUD.listeners.add(f); return () => AUD.listeners.delete(f); } },
+window.PQGame = { SPECIAL, SHIP, audio:{ ctx:() => ac(), want:wantAudio, status:audioStatus, test:testSound, reset:resetAudio, onChange(f){ AUD.listeners.add(f); return () => AUD.listeners.delete(f); } },
   finale:{ start:on => Finale.start(on), stop:() => Finale.stop(), get playing(){ return !!Finale.timer; } }, start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
   debug:{ get G(){ return G; }, get audio(){ return AC; }, get music(){ return { playing:!!Music.timer, wiz:!!(Music.song && Music.song.wiz), step:Music.step }; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); }, draw(){ if (G) draw(); } } };
 })();
