@@ -415,6 +415,7 @@ const deaths = [];
 function hurt(why){ const p = G.p; if (p.inv > 0 || p.dead || p.clear) return; p.hearts--; p.lastHit = why; sfx('hurt'); p.inv = 1.3; p.vy = -200; p.vx = -p.face*120; G.shake = .2; if (p.hearts <= 0) die(why); }
 function die(why){ const p = G.p; if (p.dead) return; deaths.push({ why:why || p.lastHit, x:Math.round(p.x) }); G.chord = !!G.opts.golden; G.tuba = 0; G.bombs = []; syncTubaUI(); p.dead = 2.2; p.vy = -340; p.vx = 0; sfx('die'); Music.stop(); }
 function step(dt){
+  dt = Math.min(Math.max(0, +dt || 0), 1/30);
   G.t += dt; if (G.msg){ G.msg.t -= dt; if (G.msg.t <= 0) G.msg = null; }
   G.shake = Math.max(0, G.shake - dt); G.bigShake = Math.max(0, G.bigShake - dt);
   const p = G.p;
@@ -578,8 +579,8 @@ function updateBoss(dt){
   if (B.state === 'intro'){ if (B.timer <= 0){ B.state = 'fight'; B.timer = 1.2; } }
   else switch (B.cfg.move){
     case 'fly': if (B.mode !== 'swoop'){ B.y += ((36 + Math.sin(B.t*2)*10) - B.y)*Math.min(1, dt*3); B.x += (B.vx ||= 50)*fast*dt; if (B.x < left || B.x > right) B.vx = -B.vx; B.x = clamp(B.x, left, right);
-        if (B.timer <= 0){ if (Math.random() < .45){ B.mode = 'swoop'; const d = Math.hypot(p.x - B.x, p.y - B.y) || 1; B.svx = (p.x - B.x)/d*170*fast; B.svy = (p.y - B.y)/d*170*fast; } else throwShot(); B.timer = 1.6/fast; } }
-      else { B.x = clamp(B.x + B.svx*dt, left, right); B.y += B.svy*dt; if (B.y > floor){ B.y = floor; B.mode = ''; G.shake = .15; } }
+        if (B.timer <= 0){ if (Math.random() < .45){ B.mode = 'swoop'; B.swoopT = 0; const ty = p.y > B.y + 24 ? p.y : floor, d = Math.hypot(p.x - B.x, ty - B.y) || 1; B.svx = (p.x - B.x)/d*170*fast; B.svy = Math.max(60*fast, (ty - B.y)/d*170*fast); } else throwShot(); B.timer = 1.6/fast; } }
+      else { B.swoopT = (B.swoopT || 0) + dt; B.x = clamp(B.x + B.svx*dt, left, right); B.y += Math.max(40, B.svy || 0)*dt; if (B.y >= floor || B.swoopT > 2.5){ if (B.y >= floor){ B.y = floor; G.shake = .15; } B.mode = ''; } }
       break;
     case 'hover': B.y += ((96 + Math.sin(B.t*1.6)*22) - B.y)*Math.min(1, dt*2); B.x += (B.vx ||= 40)*fast*dt; if (B.x < left || B.x > right) B.vx = -B.vx; B.x = clamp(B.x, left, right);
       if (B.timer <= 0){ throwShot(); B.timer = 1.3/fast; } break;
@@ -595,12 +596,25 @@ function updateBoss(dt){
         else { if (B.cfg.shot === 'rock'){ B.vy = -300; } else if (Math.random() < .3) B.charge = .8; throwShot(); B.timer = 1.7/fast; } }
       break; }
   }
+  keepBossInArena(B, dt, left, right, floor);
   B.face = toward;
   const hb = { x:B.x + 2, y:B.y + 2, w:B.w - 4, h:B.h - 2 };
   if (B.state !== 'intro' && !B.ghost) for (const s of G.shots) if (!s.dead && overlap({ x:s.x, y:s.y, w:6, h:6 }, hb)){ s.dead = 1; damageBoss(1); }
   if (!p.dead && B.state !== 'intro' && overlap(p, hb)){
     if (p.vy > 30 && p.y + p.h - hb.y < 16 && !B.ghost){ p.vy = -330; damageBoss(3); if (B.cfg.move === 'walk'){ B.inv = 1; B.charge = .9; } } else hurt('boss'); }
 }
+// boss safety net (all bosses): never NaN, never above the top of the screen or under the floor, never outside the arena walls,
+// and if it is somehow out of the camera view for more than 2 s it is put back in the middle of the arena.
+const BOSS_HOME_Y = { fly:36, hover:96, dance:98 };
+function bossHome(B, floor){ B.x = 7.5*TS - B.w/2; B.y = BOSS_HOME_Y[B.cfg.move] ?? floor; B.vx = B.vy = 0; B.svx = B.svy = 0; B.mode = ''; B.charge = 0; B.timer = Math.max(B.timer, 1); B.offT = 0; }
+function keepBossInArena(B, dt, left, right, floor){ const top = 6;
+  if (!Number.isFinite(B.x) || !Number.isFinite(B.y) || !Number.isFinite(B.vx || 0) || !Number.isFinite(B.vy || 0)){ bossHome(B, floor); return; }
+  B.x = clamp(B.x, left, right);
+  if (B.y < top){ B.y = top; if (B.vy < 0) B.vy = 0; if (B.mode === 'swoop' && B.svy < 0) B.mode = ''; }
+  if (B.y > floor){ B.y = floor; if (B.vy > 0) B.vy = 0; B.onGround = true; if (B.mode === 'swoop'){ B.mode = ''; } }
+  const seen = B.x + B.w > G.cam && B.x < G.cam + W && B.y + B.h > 0 && B.y < H;
+  B.offT = seen ? 0 : (B.offT || 0) + dt;
+  if (B.offT > 2){ bossHome(B, floor); puff(B.x + B.w/2, B.y + B.h/2, '#ffffff', 6); } }
 function damageBoss(n, force){ const B = G.B; if ((B.inv > 0 && !force) || B.gone) return; const before = B.hp; B.hp = Math.max(0, B.hp - n); B.inv = n > 1 ? .5 : .08; sfx('bossHit'); puff(B.x + 14, B.y + 14, '#ffffff', 4);
   if (before > B.maxHp/2 && B.hp <= B.maxHp/2) G.pickups.push({ x:7.5*TS, y:20, vy:0 });
   if (B.hp <= 0){ B.gone = 2; G.eshots = []; Music.stop(); sfx('boom'); G.shake = .6; G.enemies.forEach(e => e.alive && kill(e)); } }
@@ -799,5 +813,5 @@ function drawOverworld(canvas, worlds, opts = {}){
 }
 
 window.PQGame = { start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
-  debug:{ get G(){ return G; }, get audio(){ return AC; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } } } };
+  debug:{ get G(){ return G; }, get audio(){ return AC; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); } } };
 })();

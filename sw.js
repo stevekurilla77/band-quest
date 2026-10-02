@@ -1,6 +1,6 @@
 /* Band Quest service worker: network-first (so a redeployed pieces.json shows up right away),
    falling back to the cache so the app works offline. */
-const CACHE = 'band-quest-v13';
+const CACHE = 'band-quest-v14';
 const SHELL = ['./','index.html','styles.css','app.js','sprites.js','game.js','teacher.js','pieces.json','manifest.webmanifest','fonts/LilitaOne-Regular.ttf',
   'icons/icon.svg','icons/icon-192.png','icons/icon-512.png','icons/icon-maskable-512.png','icons/apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
