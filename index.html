@@ -138,6 +138,20 @@
   </div></div>
 </div>
 
+<!-- Finale: story scene with Mr. Kurilla, then the ending parade (finale.js) -->
+<div id="story" class="cine" hidden>
+  <div class="cine-stage"><canvas id="story-canvas" width="256" height="224" aria-label="story scene"></canvas></div>
+  <div class="talk" id="talk" role="button" tabindex="0" aria-live="polite"><div class="talk-who" id="talk-who"></div><div class="talk-text" id="talk-text"></div><div class="talk-next" id="talk-next">▼</div></div>
+  <div class="cine-b" id="story-go" hidden><button class="btn btn-big btn-pink" id="story-fight">⚔️ Battle Mr. Kurilla!</button><button class="btn btn-wide btn-ghost cine-later" id="story-later">🗺️ Not yet, back to map</button></div>
+  <button class="cine-skip" id="story-skip">Skip ⏭</button>
+</div>
+<div id="finale" class="cine" hidden>
+  <div class="cine-stage"><canvas id="finale-canvas" width="256" height="224" aria-label="ending parade"></canvas></div>
+  <ul id="credits-list" class="sr-only"></ul>
+  <div class="cine-b" id="finale-end" hidden><p class="fin-msg">🥁 You won the <b>Golden Snare Drum</b>!</p><button class="btn btn-big btn-yellow" id="finale-again">🔁 Play Again</button></div>
+  <button class="cine-skip" id="finale-skip">Skip ⏭</button>
+</div>
+
 <!-- Modal -->
 <div id="modal" class="modal" hidden>
   <div class="modal-card" role="dialog" aria-modal="true">
@@ -150,6 +164,7 @@
 
 <script src="sprites.js"></script>
 <script src="game.js"></script>
+<script src="finale.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

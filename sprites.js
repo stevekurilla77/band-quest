@@ -253,7 +253,7 @@ Y:'10001 10001 01010 00100 00100 00100 00100',Z:'11111 00001 00010 00100 01000 1
 9:'01110 10001 10001 01111 00001 00010 01100','!':'00100 00100 00100 00100 00100 00000 00100','-':'00000 00000 00000 11111 00000 00000 00000',
 ':':'00000 01100 01100 00000 01100 01100 00000','.':'00000 00000 00000 00000 00000 01100 01100','x':'00000 00000 10001 01010 00100 01010 10001',
 '?':'01110 10001 00001 00010 00100 00000 00100',"'":'00100 00100 01000 00000 00000 00000 00000','/':'00001 00010 00010 00100 01000 01000 10000',
-'+':'00000 00100 00100 11111 00100 00100 00000',' ':'00000 00000 00000 00000 00000 00000 00000'
+'+':'00000 00100 00100 11111 00100 00100 00000',',':'00000 00000 00000 00000 01100 00100 01000',' ':'00000 00000 00000 00000 00000 00000 00000'
 };
 const FONT = {}; for (const ch in FONT_SRC) FONT[ch] = FONT_SRC[ch].split(' ').map(r => parseInt(r, 2));
 
@@ -298,6 +298,7 @@ function enemyFrames(type){
 }
 function bossFrames(type){
   const key = 'boss-'+type; if (cache[key]) return cache[key];
+  if (type === 'kurilla'){ const s0 = wizard('stand'), c0 = wizard('cast'), h0 = wizard('happy'); return cache[key] = { r:s0, l:flip(s0), hit:tint(s0, '#ffffff'), cast:{ r:c0, l:flip(c0) }, happy:{ r:h0, l:flip(h0) } }; }
   const d = BOSS[type] || BOSS.golem, c = render(mirrorHalf(d.half), d.pal);
   const x = c.getContext('2d');
   // asymmetric hand-placed details
@@ -308,6 +309,56 @@ function bossFrames(type){
 }
 function item(name, pal){ const key = 'it-'+name+(pal?JSON.stringify(pal):''); if (cache[key]) return cache[key];
   if (name === 'tubaL') return cache[key] = flip(item('tuba', pal)); return cache[key] = render(ITEMS[name], pal); }
+// ---- Mr. Kurilla, the friendly-villain wizard (final boss): purple robe + pointy star hat, glasses, goatee, staff topped with a golden note ----
+// frame: 'stand' | 'cast' (staff raised, glowing) | 'happy' (big smile, for the ending). Drawn with rects; 32 x 40, facing right.
+function wizard(frame = 'stand'){
+  const key = 'wiz-' + frame; if (cache[key]) return cache[key];
+  const c = document.createElement('canvas'); c.width = 32; c.height = 40; const x = c.getContext('2d');
+  const R = (a, b, w, h, col) => { x.fillStyle = col; x.fillRect(a, b, w, h); };
+  const k = '#1a1030', P = '#7b3fc4', Pd = '#4e2386', Pl = '#a874e8', Y = '#ffd23f', Yd = '#c08a10', S = '#f2c29a', Sd = '#d49a70', Hb = '#5a3a22', Wd = '#8a5a2a';
+  const cast = frame === 'cast', up = cast ? 4 : 0;
+  // staff (behind the hand)
+  R(25, 9 - up, 3, 31 + up - (cast ? 4 : 0), k); R(26, 10 - up, 1, 29 + up - (cast ? 4 : 0), Wd);
+  // golden eighth note on top of the staff
+  R(26, 1 - up, 2, 9, k); R(26, 2 - up, 1, 7, Yd); R(27, 1 - up, 4, 2, k); R(28, 2 - up, 3, 1, Y); R(30, 3 - up, 1, 2, k);
+  R(22, 7 - up, 6, 5, k); R(23, 8 - up, 4, 3, Y); R(23, 8 - up, 1, 1, '#fff3a0');
+  // robe: widening trapezoid with highlight/shade, gold belt, star dots, gold hem
+  for (let r = 0; r < 18; r++){ const y = 21 + r, l = 9 - Math.floor(r*.33), rr = 19 + Math.floor(r*.28); R(l - 1, y, rr - l + 3, 1, k); R(l, y, rr - l + 1, 1, P); R(l, y, 2, 1, Pl); R(rr - 1, y, 2, 1, Pd); }
+  R(9, 28, 12, 2, Y); R(14, 28, 2, 2, Yd); R(4, 37, 22, 1, Y); R(4, 38, 22, 1, Yd);
+  for (const [a, b] of [[11, 24], [17, 33], [8, 34], [15, 31]]){ R(a, b, 1, 1, Y); }
+  R(12, 32, 1, 1, '#fff3a0');
+  // shoes
+  R(8, 38, 5, 2, k); R(16, 38, 5, 2, k); R(9, 38, 3, 1, '#3a2a4e'); R(17, 38, 3, 1, '#3a2a4e');
+  // arms: left sleeve hanging (or raised when casting), right hand on the staff
+  if (cast){ R(4, 15, 5, 8, k); R(5, 16, 3, 6, P); R(4, 13, 4, 3, k); R(5, 13, 2, 2, S); }
+  else { R(5, 22, 5, 9, k); R(6, 23, 3, 7, P); R(6, 30, 3, 2, S); }
+  R(18, 22, 8, 5, k); R(19, 23, 6, 3, P); R(23, 22, 4, 4, k); R(24, 23, 2, 2, S);
+  // head: face, glasses, eyebrows, smile, goatee
+  R(8, 12, 12, 10, k); R(9, 13, 10, 8, S); R(9, 19, 10, 2, Sd);
+  R(9, 15, 4, 3, k); R(14, 15, 4, 3, k); R(10, 16, 2, 1, '#ffffff'); R(15, 16, 2, 1, '#ffffff'); R(11, 16, 1, 1, k); R(16, 16, 1, 1, k); R(13, 16, 1, 1, k);
+  if (frame === 'happy'){ R(10, 14, 3, 1, Hb); R(14, 14, 3, 1, Hb); } else { R(9, 13, 3, 1, Hb); R(12, 14, 1, 1, Hb); R(15, 14, 1, 1, Hb); R(16, 13, 3, 1, Hb); }   // mischievous brows
+  R(11, 19, 6, 1, k); R(10, 18, 1, 1, k); R(17, 18, 1, 1, k); if (frame === 'happy'){ R(11, 20, 6, 1, '#c0283a'); R(12, 20, 4, 1, '#ff8a8a'); }
+  R(12, 20, 4, 3, Hb); R(13, 23, 2, 1, Hb);
+  // pointy hat leaning back, with a brim and stars
+  for (let r = 0; r < 11; r++){ const y = 1 + r, cx = 11 + Math.round(r*.35), hw = Math.round(r*.7); R(cx - hw - 1, y, hw*2 + 3, 1, k); R(cx - hw, y, hw*2 + 1, 1, P); R(cx + hw - 1, y, 2, 1, Pd); }
+  R(7, 0, 3, 2, k); R(8, 0, 1, 1, Y);
+  R(4, 11, 21, 2, k); R(5, 11, 19, 1, Pd); R(5, 12, 19, 1, P);
+  R(12, 6, 1, 1, Y); R(11, 7, 3, 1, Y); R(12, 8, 1, 1, Y); R(16, 9, 1, 1, Y); R(9, 9, 1, 1, '#fff3a0');
+  return cache[key] = c;
+}
+// the GOLDEN SNARE DRUM: gold shell with lugs, white head, red hoops, two drumsticks (24 x 20)
+function snare(){
+  const key = 'snare'; if (cache[key]) return cache[key];
+  const c = document.createElement('canvas'); c.width = 24; c.height = 20; const x = c.getContext('2d'); const R = (a, b, w, h, col) => { x.fillStyle = col; x.fillRect(a, b, w, h); };
+  const k = '#1a1030';
+  R(1, 6, 22, 12, k); R(2, 7, 20, 10, '#ffd23f'); R(2, 7, 4, 10, '#fff3a0'); R(18, 7, 4, 10, '#c08a10');
+  R(1, 5, 22, 3, k); R(2, 5, 20, 2, '#e83a4a'); R(1, 16, 22, 3, k); R(2, 17, 20, 1, '#e83a4a');
+  for (let i = 4; i < 21; i += 4){ R(i, 8, 1, 8, '#b07800'); R(i, 8, 1, 1, '#ffffff'); }
+  R(2, 3, 20, 3, k); R(3, 3, 18, 2, '#ffffff'); R(5, 3, 8, 1, '#e8e4f0');
+  for (let i = 0; i < 9; i++){ R(3 + i, 2 - Math.floor(i/3), 1, 1, '#8a5a2a'); R(20 - i, 2 - Math.floor(i/3), 1, 1, '#8a5a2a'); }
+  R(11, 0, 2, 1, '#e8d8b0');
+  return cache[key] = c;
+}
 function noteShot(color){ const key = 'shot-'+color; return cache[key] || (cache[key] = render(["...kkk", "...kwwk", "...kwkwk", "...kw.kk", ".kkkw", "kwwwwk", "kwwwwk", ".kkkk"], { w:color })); }
 function text(ctx, str, x, y, color = '#fff', shadow = '#1a1030', scale = 1){
   str = String(str).toUpperCase();
@@ -320,5 +371,5 @@ function text(ctx, str, x, y, color = '#fff', shadow = '#1a1030', scale = 1){
 const textWidth = (s, scale = 1) => String(s).length * 6 * scale - scale;
 
 window.PQSprites = { PAL, HAIRS, INSTR:Object.keys(INSTR), NOTE_COLORS, ENEMIES:Object.keys(EN), MIX_ENEMIES:Object.keys(MIX), BOSSES:Object.keys(BOSS),
-  heroFrames, enemyFrames, bossFrames, item, noteShot, text, textWidth, render };
+  heroFrames, enemyFrames, bossFrames, item, noteShot, text, textWidth, render, wizard, snare };
 })();

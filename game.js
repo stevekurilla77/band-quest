@@ -368,9 +368,9 @@ function blip(type, f0, f1, dur, vol = .3, t0 = 0, dest){ const c = ac(); if (!c
   o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur); o.connect(g).connect(dest || master); o.start(t); o.stop(t + dur + .02); }
 let noiseBuf = null;
-function noise(dur, vol = .3, t0 = 0, hp = 800){ const c = ac(); if (!c) return; if (!noiseBuf){ noiseBuf = c.createBuffer(1, c.sampleRate*.5, c.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1; }
+function noise(dur, vol = .3, t0 = 0, hp = 800, dest){ const c = ac(); if (!c) return; if (!noiseBuf){ noiseBuf = c.createBuffer(1, c.sampleRate*.5, c.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1; }
   const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime + t0; s.buffer = noiseBuf; f.type = 'highpass'; f.frequency.value = hp;
-  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur); s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + dur + .02); }
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur); s.connect(f).connect(g).connect(dest || master); s.start(t); s.stop(t + dur + .02); }
 const mtof = m => 440*Math.pow(2, (m - 69)/12);
 // brass voice: detuned saw + square through a lowpass that "blooms" open then closes (the BWAA of a low brass note)
 function brass(m, t0, dur, vol, bend = .94){ const c = ac(); if (!c) return; const t = c.currentTime + t0, f = mtof(m), lp = c.createBiquadFilter(), g = c.createGain();
@@ -393,6 +393,7 @@ const SFX = {
   tubaFire:()=>{ brass(46, 0, .13, .3, .8); noise(.06, .12, 0, 2500); }, crate:()=>{ noise(.16, .3, 0, 500); blip('square', 190, 80, .12, .14); },
   fanfare:()=>{ [[58,0,.11],[58,.12,.11],[65,.24,.11],[70,.36,.5]].forEach(([m,t,d])=>brass(m, t, d, .2, .98)); brass(34, .36, .6, .35); [82,86,89,94].forEach((m,i)=>blip('triangle', mtof(m), mtof(m), .12, .18, .55 + i*.06)); },
   windup:()=>{ blip('triangle', 520, 880, .18, .16); blip('triangle', 880, 880, .06, .12, .2); }, toss:()=>{ noise(.08, .14, 0, 2500); blip('square', 700, 420, .08, .08); },
+  spell:()=>[84,88,91,96].forEach((m,i)=>blip('triangle', mtof(m), mtof(m), .09, .14, i*.045)),
   cannon:()=>{ noise(.35, .35, 0, 150); blip('square', 150, 50, .25, .2); }, splash:()=>{ noise(.3, .2, 0, 1200); blip('sine', 600, 180, .22, .12); },
   empty:()=>blip('square', 120, 100, .06, .12), pause:()=>blip('triangle', 880, 880, .08, .2), heart:()=>[76,79,84].forEach((m,i)=>blip('triangle', mtof(m), mtof(m), .1, .25, i*.07)),
 };
@@ -411,6 +412,87 @@ const Music = {
       if (bassHit) blip('triangle', mtof(chordRoot + (i % 4 === 2 ? 7 : 0)), mtof(chordRoot + (i % 4 === 2 ? 7 : 0)), dt*.9, .5, t0, musicGain);
       if (s.mel[i] !== null) blip('square', mtof(s.root + 12 + s.mel[i]), mtof(s.root + 12 + s.mel[i]), dt*.8, .12, t0, musicGain);
       if (i % 2 === 1) blip('square', mtof(s.root + s.sc[(deg + 2 + (i % 4 === 1 ? 0 : 2)) % 7]), mtof(s.root + s.sc[(deg + 2) % 7]), dt*.4, .05, t0, musicGain);
+      this.next += dt; this.step++; } },
+};
+
+// ---------- FINAL BOSS: Mr. Kurilla, the Maestro (a friendly "villain" wizard) ----------
+// Floats between a few spots, telegraphs every spell (staff glows + sparkles + "!" for ~0.7-0.95 s), teleports with a fade (no contact while faded),
+// and after every 3rd spell he flops down to the floor, dizzy, for ~2 s: stomp him then (3 damage) or play notes at him any time (1 each); a tuba blast does 3.
+// Phases by health: 1 = single slow notes, 2 = 3-note fans + falling-note rain (floor markers first), 3 = 5-note fans, rain and a bouncing whole note.
+const WIZ_SPOTS = [[2.2, 44], [11.4, 44], [6.8, 30], [3, 82], [11, 82], [6.8, 64]];
+const WIZ_SPELLS = { 1:['volley', 'volley', 'volley'], 2:['volley', 'rain', 'volley'], 3:['rain', 'volley', 'whole'] };
+function finalTheme(){ const th = themeOf({ theme:'castle', colors:{ sky:'#3a1a6e', ground:'#4a2a7a', groundTop:'#c9b6ff', accent:'#ffd23f' } });
+  return Object.assign(th, { key:'final', id:'final-tower', music:{ root:60, minor:false, bpm:132 } }); }
+function updateWizard(B, dt, p, left, right, floor, hpF){
+  const phase = hpF > 2/3 ? 1 : hpF > 1/3 ? 2 : 3, tempo = [1, 1, 1.15, 1.3][phase]; B.phase = phase;
+  if (!B.mode){ B.mode = 'float'; B.spot = 5; B.casts = 0; B.timer = 1; }
+  const sp = WIZ_SPOTS[B.spot] || WIZ_SPOTS[5], go = (mx, my, kk) => { B.x += (mx - B.x)*Math.min(1, dt*kk); B.y += (my - B.y)*Math.min(1, dt*kk); };
+  B.ghost = B.mode === 'out' || B.mode === 'in';
+  switch (B.mode){
+    case 'float': go(sp[0]*TS, sp[1] + Math.sin(B.t*2)*6, 2.5); if (B.timer <= 0){ B.mode = 'charge'; B.timer = [.95, .95, .8, .7][phase]; B.spell = WIZ_SPELLS[phase][B.casts % 3]; sfx('windup'); } break;
+    case 'charge': go(sp[0]*TS, sp[1], 3); if (Math.random() < .5){ const a = Math.random()*Math.PI*2; G.parts.push({ x:B.x + B.w + 6 + Math.cos(a)*16, y:B.y + 2 + Math.sin(a)*16, vx:-Math.cos(a)*40, vy:-Math.sin(a)*40, life:.35, color:Math.random() < .5 ? '#ffd23f' : '#c9b6ff', s:1 }); }
+      if (B.timer <= 0){ castSpell(B, p, phase, floor); B.casts++; B.mode = 'after'; B.timer = .55; } break;
+    case 'after': go(sp[0]*TS, sp[1], 2); if (B.timer <= 0){ if (B.casts % 3 === 0){ B.mode = 'drop'; B.vy = 0; } else if (B.casts % 2 === 0 || phase > 1){ B.mode = 'out'; B.timer = .45; sfx('pause'); } else { B.mode = 'float'; B.timer = 1.3/tempo; } } break;
+    case 'out': if (B.timer <= 0){ const far = WIZ_SPOTS.map((s, i) => i).filter(i => i !== B.spot).sort((a, b) => Math.abs(WIZ_SPOTS[b][0]*TS - p.x) - Math.abs(WIZ_SPOTS[a][0]*TS - p.x));
+        B.spot = far[Math.floor(Math.random()*2)]; B.x = WIZ_SPOTS[B.spot][0]*TS; B.y = WIZ_SPOTS[B.spot][1]; B.mode = 'in'; B.timer = .45; puff(B.x + B.w/2, B.y + B.h/2, '#c9b6ff', 10, 70); } break;
+    case 'in': if (B.timer <= 0){ B.mode = 'float'; B.timer = 1.1/tempo; } break;
+    case 'drop': B.vy = Math.min(260, (B.vy || 0) + 500*dt); B.y += B.vy*dt; if (B.y >= floor){ B.y = floor; B.vy = 0; B.mode = 'rest'; B.timer = [2.6, 2.6, 2.3, 2.0][phase]; G.shake = .15; sfx('bump'); } break;
+    case 'rest': B.y = floor; if (B.timer <= 0){ B.mode = 'out'; B.timer = .45; sfx('pause'); } break;
+  }
+  if (B.mode !== 'out' && B.mode !== 'in') B.ghost = false;
+  for (const m of G.marks){ m.t += dt; if (!m.fired && m.t >= m.delay){ m.fired = true; G.eshots.push({ kind:'note', x:m.x, y:-6, vx:0, vy:120, t:0, life:4, rain:true, hr:4 }); } }
+  G.marks = G.marks.filter(m => !m.fired || m.t < m.delay + .2);
+}
+function castSpell(B, p, phase, floor){ const cx = B.x + (B.face > 0 ? B.w + 6 : -6), cy = B.y + 4; sfx('spell');
+  if (B.spell === 'volley'){ const n = [1, 1, 3, 3][phase], spd = [62, 62, 68, 76][phase], a0 = Math.atan2(p.y + 10 - cy, p.x + 5 - cx);
+    for (let i = 0; i < n; i++){ const a = a0 + (i - (n - 1)/2)*.34; G.eshots.push({ kind:'note', x:cx, y:cy, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd, t:0, life:5, hr:4, hue:i }); } }
+  else if (B.spell === 'rain'){ const n = phase === 2 ? 3 : 4, cols = [], start = 1 + Math.floor(Math.random()*3);
+    for (let c = start; c <= 14 && cols.length < n; c += 3 + Math.floor(Math.random()*2)) cols.push(c);
+    cols.forEach((c, i) => G.marks.push({ x:c*TS + 8, t:0, delay:.9 + i*.18 })); }
+  else if (B.spell === 'whole'){ const dir = p.x < B.x ? -1 : 1; G.eshots.push({ kind:'whole', x:cx, y:floor + B.h - 9, vx:dir*60, vy:-150, grav:700, t:0, life:8, r:7, hr:6 }); }
+  puff(cx, cy, '#ffd23f', 8, 70); }
+function spellShot(s, p){
+  const floorY = 12*TS;
+  if (s.kind === 'whole'){ if (s.y > floorY - s.r){ s.y = floorY - s.r; s.vy = -210; } if (s.x < 1.2*TS + s.r || s.x > 14.8*TS - s.r){ s.dead = 1; puff(s.x, s.y, '#ffffff', 8, 60); } }
+  else if (s.rain && s.y > floorY - 4){ s.dead = 1; puff(s.x, floorY - 4, '#ffd23f', 6, 50); }
+  else if (!s.rain && (s.x < 1.2*TS || s.x > 14.8*TS || s.y > floorY - 2)){ s.dead = 1; puff(s.x, s.y, '#c9b6ff', 5, 40); }
+  const r = s.r || 5;
+  for (const n of G.shots) if (!s.dead && !n.dead && overlap({ x:n.x, y:n.y, w:6, h:6 }, { x:s.x - r, y:s.y - r, w:r*2, h:r*2 })){ n.dead = 1; if (s.kind === 'whole' && !s.hit){ s.hit = 1; sfx('bump'); } else { s.dead = 1; sfx('bump'); puff(s.x, s.y, '#ffffff', 6, 50); } }
+  if (!s.dead && !p.dead && s.kind === 'whole' && p.vy > 30 && p.y + p.h - (s.y - r) < 12 && overlap(p, { x:s.x - r, y:s.y - r, w:r*2, h:r*2 })){ s.dead = 1; p.vy = input.jump ? -380 : -260; sfx('stomp'); puff(s.x, s.y, '#ffffff', 8, 70); } }
+function drawWizardBoss(x, B, cam){
+  const f = SP.bossFrames('kurilla'), cast = B.mode === 'charge', fr = cast ? f.cast : f, flash = B.inv > 0 && Math.floor(G.t*30) % 2;
+  const img = flash ? f.hit : (B.face > 0 ? fr.r : fr.l), bob = B.mode === 'rest' ? 0 : Math.round(Math.sin(G.t*4)*2);
+  const bx = Math.round(B.x - cam + B.w/2 - img.width/2), by = Math.round(B.y + B.h - img.height + 2 + bob);
+  const kf = clamp(B.timer/.45, 0, 1), a = B.mode === 'out' ? kf : B.mode === 'in' ? 1 - kf : 1;
+  if (B.mode !== 'rest' && B.mode !== 'drop'){ x.globalAlpha = .35*a; x.fillStyle = '#c9b6ff'; x.fillRect(bx + 6, 12*TS - 3, 20, 2); }
+  x.globalAlpha = a; x.drawImage(img, bx, by); x.globalAlpha = 1;
+  if (cast){ const tx = B.face > 0 ? bx + 27 : bx + 4, ty = by + 2; glow(x, tx, ty, 7 + Math.round(Math.sin(G.t*20)*2)); alertBubble(x, bx + 16, by - 2, B.timer); }
+  if (B.mode === 'rest'){ for (let i = 0; i < 3; i++){ const a = G.t*4 + i*2.1, sx = Math.round(bx + 16 + Math.cos(a)*10), sy = Math.round(by + 2 + Math.sin(a)*3); x.fillStyle = i % 2 ? '#ffffff' : '#ffd23f'; x.fillRect(sx, sy - 1, 1, 3); x.fillRect(sx - 1, sy, 3, 1); }
+    SP.text(x, 'DIZZY!', bx + 16 - Math.round(SP.textWidth('DIZZY!')/2), by - 12, Math.floor(G.t*6) % 2 ? '#ffd23f' : '#ffffff'); } }
+function drawMarks(x, cam){ for (const m of G.marks){ if (m.fired) continue; const blink = (m.delay - m.t) < .35 ? Math.floor(G.t*20) % 2 : Math.floor(G.t*8) % 2; const mx = Math.round(m.x - cam);
+    x.globalAlpha = .55 + blink*.35; x.fillStyle = '#ffd23f'; x.fillRect(mx - 7, 12*TS - 3, 14, 2); x.fillRect(mx - 5, 12*TS - 5, 10, 2); x.globalAlpha = 1;
+    x.fillStyle = '#ffd23f'; x.fillRect(mx, 4 + 15, 1, 7); x.fillRect(mx - 3, 4 + 21, 4, 3); x.fillRect(mx + 1, 4 + 15, 3, 1); } }
+function drawNoteShot(x, s, sx, sy){
+  if (s.kind === 'whole'){ x.fillStyle = '#1a1030'; x.fillRect(sx - 8, sy - 5, 16, 10); x.fillRect(sx - 6, sy - 7, 12, 14); x.fillStyle = s.hit ? '#ffb0d0' : '#ffffff'; x.fillRect(sx - 7, sy - 4, 14, 8); x.fillRect(sx - 5, sy - 6, 10, 12);
+    x.fillStyle = '#1a1030'; x.fillRect(sx - 3, sy - 3, 4, 6); x.fillRect(sx - 1, sy - 4, 4, 6); return; }
+  const col = s.rain ? '#ffd23f' : ['#ff4f79', '#c9b6ff', '#7cc0ff', '#ffd23f', '#9ff0c8'][(s.hue || 0) % 5];
+  x.fillStyle = '#1a1030'; x.fillRect(sx - 5, sy, 7, 6); x.fillRect(sx + 1, sy - 8, 3, 10); x.fillRect(sx + 2, sy - 9, 5, 4);
+  x.fillStyle = col; x.fillRect(sx - 4, sy + 1, 5, 4); x.fillRect(sx + 2, sy - 7, 1, 9); x.fillRect(sx + 3, sy - 8, 3, 2); x.fillStyle = '#ffffff'; x.fillRect(sx - 3, sy + 1, 1, 1); }
+// ---------- finale song: an original cheerful tune for the ending parade (synthesized; plays only when music is on, through the music volume) ----------
+const FIN_MEL = [72,null,76,null,79,null,76,77, 79,null,74,null,71,null,74,76, 77,76,72,null,69,null,72,74, 76,null,77,null,76,74,72,null,
+                 72,74,76,79,84,null,79,76, 77,null,81,null,77,76,74,72, 74,null,79,null,77,null,74,null, 72,null,79,76,72,null,null,null,
+                 72,null,76,null,79,null,76,77, 79,null,74,null,71,null,74,76, 77,76,72,null,69,null,72,74, 76,null,77,null,76,74,72,null,
+                 72,74,76,79,84,null,79,76, 77,null,81,null,77,76,74,72, 79,77,76,74,71,74,77,79, 84,null,79,null,72,null,null,null];
+const FIN_CHORDS = [[48,64,67],[43,62,67],[45,60,64],[41,60,65],[48,64,67],[41,60,65],[43,62,65],[48,64,67]];
+const Finale = { timer:null, next:0, step:0,
+  start(on){ this.stop(); if (on === false || !ac()) return false; this.next = AC.currentTime + .12; this.step = 0; this.timer = setInterval(() => this.tick(), 30); return true; },
+  stop(){ clearInterval(this.timer); this.timer = null; },
+  tick(){ const dt = 60/132/2; if (this.next < AC.currentTime - .25) this.next = AC.currentTime + .05;
+    while (this.next < AC.currentTime + .15){ const i = this.step % FIN_MEL.length, bar = Math.floor(i/8) % 8, ch = FIN_CHORDS[bar], t0 = this.next - AC.currentTime, m = FIN_MEL[i];
+      if (m !== null){ blip('square', mtof(m), mtof(m), dt*.85, .13, t0, musicGain); blip('triangle', mtof(m + 12), mtof(m + 12), dt*.5, .05, t0, musicGain); }
+      if (i % 2 === 0) blip('triangle', mtof(ch[0] - (i % 4 === 2 ? -7 : 0)), mtof(ch[0] - (i % 4 === 2 ? -7 : 0)), dt*1.6, .5, t0, musicGain);
+      if (i % 2 === 1) for (const n of ch.slice(1)) blip('square', mtof(n), mtof(n), dt*.4, .035, t0, musicGain);
+      if (i % 8 === 2 || i % 8 === 6) noise(.12, .22, t0, 1800, musicGain); else noise(.03, .07, t0, 6000, musicGain);   /* snare on 2 and 4, hi-hat on the off-beats */
       this.next += dt; this.step++; } },
 };
 
@@ -459,9 +541,10 @@ let G = null, raf = 0, last = 0, acc = 0, pausedCb = null;
 const BOSS_CFG = {
   valkyrie:{ move:'fly', shot:'spear' }, cluckzilla:{ move:'hop', shot:'egg' }, santa:{ move:'walk', shot:'axe' },
   dragon:{ move:'hover', shot:'fire' }, spectro:{ move:'dance', shot:'orb' }, golem:{ move:'walk', shot:'rock' },
+  kurilla:{ move:'wizard', shot:'note' },   /* the final boss (see updateWizard) */
 };
 function newRun(opts){
-  const boss = opts.level === 'boss', special = boss ? null : specialOf(opts.seed, opts.level), th = special === 'ship' ? shipTheme(opts.world) : themeOf(opts.world);
+  const final = opts.level === 'final', boss = opts.level === 'boss' || final, special = boss ? null : specialOf(opts.seed, opts.level), th = final ? finalTheme() : special === 'ship' ? shipTheme(opts.world) : themeOf(opts.world);
   G = { opts, th, bg:backgrounds(th), tl:tiles(th), boss, coins:0, lives:opts.lives, maxHearts:3 + (opts.plume ? 1 : 0), chord:!!(opts.chord || opts.golden),
         hero:SP.heroFrames(opts.inst, opts.hair, !!opts.golden), enemyType:(opts.world && opts.world.enemy) || 'gremlin', cpReached:false, t:0, paused:false, done:false, msg:null, shake:0,
         tuba:clamp(opts.tuba | 0, 0, TUBA.ammo), tubaCool:0, tubaKO:0, bigShake:0 };
@@ -475,7 +558,7 @@ function resetLevel(first){
   G.coinList = b.coins.map(c => ({ ...c, taken:false }));
   G.enemies = b.enemies.map(e => { const K = ENEMY_KIND[e.type] || {};
     return { ...e, w:K.w || 14, h:K.h || 14, vx:-(K.speed || 28), vy:0, baseY:e.y, t:Math.random()*6, alive:true, dead:0, face:-1, hp:K.hp || 1, st:'idle', cool:ARCHER.first + Math.random(), dir:-1, hopT:.4 + Math.random()*.5 }; });
-  G.shots = []; G.eshots = []; G.parts = []; G.bumps = []; G.pops = []; G.pickups = []; G.bombs = []; G.blasts = []; G.floats = [];
+  G.shots = []; G.eshots = []; G.marks = []; G.parts = []; G.bumps = []; G.pops = []; G.pickups = []; G.bombs = []; G.blasts = []; G.floats = [];
   const sx = G.cpReached ? b.cpX : b.startX;
   G.p = { x:sx, y:(gTopAt(sx) - 2)*TS - 4, w:10, h:20, vx:0, vy:0, face:1, onGround:false, coyote:0, buffer:0, hearts:G.maxHearts, inv:first ? 0 : 1.5, cool:0, dead:0, anim:0, clear:0 };
   G.cam = clamp(G.p.x - 100, 0, Math.max(0, G.L.w*TS - W));
@@ -566,6 +649,7 @@ function step(dt){
   for (const s of G.eshots){ s.t += dt; if (s.grav) s.vy += s.grav*dt; s.x += s.vx*dt; s.y += s.vy*dt; s.rot = (s.rot || 0) + dt*12;
     if (s.y > H + 20 || s.x < -20 || s.x > G.L.w*TS + 20 || s.t > (s.life || 6)) s.dead = 1;
     if (s.kind === 'ball' || s.kind === 'barrel') shipShot(s, p);
+    if (s.kind === 'note' || s.kind === 'whole') spellShot(s, p);
     if (s.kind === 'rock' && s.y > 12*TS - 8){ s.dead = 1; puff(s.x, s.y, '#9aa0b4', 6); G.shake = .1; }
     if (s.kind === 'arrow'){ if (s.t > ARCHER.life || solid(Math.floor((s.x + Math.sign(s.vx)*6)/TS), Math.floor(s.y/TS))){ s.dead = 1; puff(s.x, s.y, '#e0a868', 4, 30); }
       for (const n of G.shots) if (!s.dead && !n.dead && overlap({ x:n.x, y:n.y, w:6, h:6 }, { x:s.x - 7, y:s.y - 3, w:14, h:7 })){ n.dead = 1; s.dead = 1; sfx('bump'); puff(s.x, s.y, '#ffffff', 5, 40); } }
@@ -686,7 +770,7 @@ function updateBombs(dt){
 function blast(cx, cy){ const R = TUBA.radius; let ko = 0; sfx('bwaamp'); G.shake = .4; G.bigShake = .3; G.blasts.push({ x:cx, y:cy, t:0 });
   for (let i = 0; i < 26; i++) puff(cx, cy, ['#fff3a0','#ffd23f','#ff8c42','#ffffff','#1a1030'][i%5], 1, 170);
   for (const e of G.enemies) if (e.alive && Math.hypot(e.x + e.w/2 - cx, e.y + e.h/2 - cy) < R + 8){ kill(e); ko++; }
-  for (const s of G.eshots) if ((s.kind === 'arrow' || s.kind === 'ball' || s.kind === 'barrel') && Math.hypot(s.x - cx, s.y - cy) < R + 8) s.dead = 1;
+  for (const s of G.eshots) if ((s.kind === 'arrow' || s.kind === 'ball' || s.kind === 'barrel' || s.kind === 'note' || s.kind === 'whole') && Math.hypot(s.x - cx, s.y - cy) < R + 8) s.dead = 1;
   const B = G.B; if (B && !B.gone && B.state !== 'intro' && !B.ghost){ const nx = clamp(cx, B.x, B.x + B.w), ny = clamp(cy, B.y, B.y + B.h);
     if (Math.hypot(nx - cx, ny - cy) < R){ damageBoss(TUBA.bossDmg, true); ko++; } }
   const w = G.L.w, tmin = Math.floor((cx - R)/TS), tmax = Math.floor((cx + R)/TS);
@@ -722,6 +806,7 @@ function updateBoss(dt){
       if (B.timer <= 0){ throwShot(); B.timer = 1.3/fast; } break;
     case 'dance': { const cx = 7.5*TS - B.w/2; B.x = cx + Math.sin(B.t*.9*fast)*80; B.y = 98 + Math.sin(B.t*1.8*fast)*24;
       B.ghost = (B.t % 4) > 3.2; if (B.timer <= 0){ throwShot(); B.timer = 1.8/fast; } break; }
+    case 'wizard': updateWizard(B, dt, p, left, right, floor, hpF); break;
     case 'hop': case 'walk': {
       B.vy = Math.min(500, B.vy + 900*dt); const wasAir = !B.onGround;
       if (B.cfg.move === 'walk' && B.onGround){ B.vx = toward*(B.charge > 0 ? 150 : 38)*fast; B.charge = (B.charge || 0) - dt; }
@@ -736,12 +821,13 @@ function updateBoss(dt){
   B.face = toward;
   const hb = { x:B.x + 2, y:B.y + 2, w:B.w - 4, h:B.h - 2 };
   if (B.state !== 'intro' && !B.ghost) for (const s of G.shots) if (!s.dead && overlap({ x:s.x, y:s.y, w:6, h:6 }, hb)){ s.dead = 1; damageBoss(1); }
+  const harmless = B.cfg.move === 'wizard' && (B.ghost || B.mode === 'rest' || B.mode === 'drop');   /* a fading or dizzy wizard never hurts on touch */
   if (!p.dead && B.state !== 'intro' && overlap(p, hb)){
-    if (p.vy > 30 && p.y + p.h - hb.y < 16 && !B.ghost){ p.vy = -330; damageBoss(3); if (B.cfg.move === 'walk'){ B.inv = 1; B.charge = .9; } } else hurt('boss'); }
+    if (p.vy > 30 && p.y + p.h - hb.y < 16 && !B.ghost){ p.vy = -330; damageBoss(3); if (B.cfg.move === 'walk'){ B.inv = 1; B.charge = .9; } if (B.cfg.move === 'wizard' && B.hp > 0){ B.mode = 'out'; B.timer = .5; } } else if (!harmless) hurt('boss'); }
 }
 // boss safety net (all bosses): never NaN, never above the top of the screen or under the floor, never outside the arena walls,
 // and if it is somehow out of the camera view for more than 2 s it is put back in the middle of the arena.
-const BOSS_HOME_Y = { fly:36, hover:96, dance:98 };
+const BOSS_HOME_Y = { fly:36, hover:96, dance:98, wizard:44 };
 function bossHome(B, floor){ B.x = 7.5*TS - B.w/2; B.y = BOSS_HOME_Y[B.cfg.move] ?? floor; B.vx = B.vy = 0; B.svx = B.svy = 0; B.mode = ''; B.charge = 0; B.timer = Math.max(B.timer, 1); B.offT = 0; }
 function keepBossInArena(B, dt, left, right, floor){ const top = 6;
   if (!Number.isFinite(B.x) || !Number.isFinite(B.y) || !Number.isFinite(B.vx || 0) || !Number.isFinite(B.vy || 0)){ bossHome(B, floor); return; }
@@ -796,7 +882,9 @@ function draw(){
     x.drawImage(img, ex, Math.round(e.y + e.h - img.height)); if (G.base.pirate) pirateHat(x, e, ex, Math.round(e.y + e.h - img.height), img);
     if (e.st === 'wind') alertBubble(x, Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h - img.height) - 4, e.stT); }
   // boss
-  if (G.B && (!G.B.gone || G.B.gone > 1)){ const B = G.B, f = SP.bossFrames(B.key); const img = B.inv > 0 && Math.floor(G.t*30) % 2 ? f.hit : (B.face > 0 ? f.r : f.l);
+  if (G.marks.length) drawMarks(x, cam);
+  if (G.B && G.B.key === 'kurilla' && (!G.B.gone || G.B.gone > 1)) drawWizardBoss(x, G.B, cam);
+  else if (G.B && (!G.B.gone || G.B.gone > 1)){ const B = G.B, f = SP.bossFrames(B.key); const img = B.inv > 0 && Math.floor(G.t*30) % 2 ? f.hit : (B.face > 0 ? f.r : f.l);
     x.globalAlpha = B.ghost ? .35 + Math.sin(G.t*30)*.15 : 1; const bob = B.cfg.move === 'fly' || B.cfg.move === 'hover' || B.cfg.move === 'dance' ? Math.round(Math.sin(G.t*6)*2) : 0;
     x.drawImage(img, Math.round(B.x - cam - 2), Math.round(B.y - 4 + bob)); x.globalAlpha = 1; }
   // enemy shots
@@ -811,6 +899,7 @@ function draw(){
         x.fillStyle = '#1a1030'; x.fillRect(tip - 2, sy - 3, 5, 7); x.fillStyle = '#ff4f79'; x.fillRect(tip - 1, sy - 2, 3, 5); x.fillStyle = '#ffc0d8'; x.fillRect(tip - (d > 0 ? 0 : -1), sy - 2, 1, 2);
         x.fillStyle = '#3a6ee8'; x.fillRect(tail - 2, sy - 3, 4, 2); x.fillRect(tail - 2, sy + 2, 4, 2); x.fillStyle = '#7cc0ff'; x.fillRect(tail - 1, sy - 3, 2, 1); break; }
       case 'ball': case 'barrel': drawShipShot(x, s, sx, sy); break;
+      case 'note': case 'whole': drawNoteShot(x, s, sx, sy); break;
       case 'orb': x.fillStyle = '#9b5de5'; x.fillRect(sx - 3, sy - 3, 6, 6); x.fillStyle = '#ffffff'; x.fillRect(sx - 1, sy - 2, 2, 2); break;
       default: x.fillStyle = '#1a1030'; x.fillRect(sx - 5, sy - 5, 10, 10); x.fillStyle = '#9aa0b4'; x.fillRect(sx - 4, sy - 4, 8, 8); x.fillStyle = '#d0d4e4'; x.fillRect(sx - 3, sy - 3, 3, 2);
     } }
@@ -1034,6 +1123,6 @@ function drawOverworld(canvas, worlds, opts = {}){
   return hits;
 }
 
-window.PQGame = { SPECIAL, SHIP, start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
+window.PQGame = { SPECIAL, SHIP, finale:{ start:on => Finale.start(on), stop:() => Finale.stop(), get playing(){ return !!Finale.timer; } }, start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
   debug:{ get G(){ return G; }, get audio(){ return AC; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); }, draw(){ if (G) draw(); } } };
 })();

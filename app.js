@@ -50,6 +50,7 @@ const BADGES = [
   { id:'castle',   e:'🏰', n:'Castle Crusher',  d:'Defeat your first boss' },
   ...PIECES.map(p => ({ id:'boss-'+p.id, e:p.badge.emoji, n:p.badge.name, d:`Defeat ${p.boss}` })),
   { id:'grandtour',e:'🌍', n:'Grand Tour',      d:`Defeat all ${PIECES.length} world bosses` },
+  { id:'goldsnare',e:'🥁', n:'Golden Snare',    d:'Defeat Mr. Kurilla, the final boss' },
   { id:'notes500', e:'🪙', n:'Note Collector',  d:'Collect 500 note coins' },
   { id:'notes2000',e:'💰', n:'Note Hoarder',    d:'Collect 2,000 note coins' },
   { id:'neverquit',e:'🔁', n:'Never Give Up',   d:'Use a continue' },
@@ -68,7 +69,7 @@ function load(keep){
   if (!keep){ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch(e){ S = fresh(); memOnly = true; } }
   const f = fresh(); for (const k in f) if (S[k] === undefined) S[k] = f[k];
   if (!S.game || typeof S.game !== 'object') S.game = {};
-  const g = S.game, d = { inst:null, hair:'short', lives:START_LIVES, score:0, coins:0, continues:0, tubaKO:0, worlds:{}, current:null };
+  const g = S.game, d = { inst:null, hair:'short', lives:START_LIVES, score:0, coins:0, continues:0, tubaKO:0, worlds:{}, current:null, finalBossBeaten:false, finalWins:0 };
   for (const k in d) if (g[k] === undefined) g[k] = d[k];
   if (g.inst && !INST_NAME[g.inst]) g.inst = null;   // retired instrument (drums): the hero picker opens on the next PLAY; progress is kept
   if (!HAIR_NAME[g.hair]) g.hair = 'short';
@@ -123,6 +124,7 @@ function worldOpen(id){ const i = worldIdx(id); if (i <= 0) return true; const w
 function stageState(id, i){
   const w = gw(id), prev = PIECES[worldIdx(id) - 1];
   if (!worldOpen(id)) return { open:false, why:`Beat ${prev ? prev.boss : 'the previous boss'} first` };
+  if (i === 4) return id === lastPiece().id && w.boss > 0 ? { open:true } : { open:false, why:'Beat every world boss first' };
   if (i === 3) return w.cleared[2] ? { open:true } : { open:false, why:'Clear Stages 1–3 to open the castle' };
   if (i > 0 && !w.cleared[i-1]) return { open:false, why:`Clear Stage ${i} first` };
   return { open:true };
@@ -138,6 +140,7 @@ function checkBadges(extra = {}){
   if (S.game.coins >= 500) give('notes500'); if (S.game.coins >= 2000) give('notes2000');
   if (S.game.continues > 0) give('neverquit');
   if (S.game.tubaKO > 0) give('tubahero');
+  if (S.game.finalBossBeaten) give('goldsnare');
   if (PIECES.some(p => gw(p.id).golden)) give('listener'); if (PIECES.length && PIECES.every(p => !p.yt || gw(p.id).golden)) give('superfan');
   return got.map(id => BADGES.find(b => b.id === id));
 }
@@ -171,7 +174,7 @@ let mapFx = null, bannerTimer = 0;
 function hideMapBanner(){ clearTimeout(bannerTimer); const b = $('#map-banner'); if (b) b.remove(); document.body.classList.remove('has-map-banner'); }
 function mapBanner(html){ hideMapBanner(); const b = document.createElement('div'); b.id = 'map-banner'; b.className = 'map-banner'; b.setAttribute('role', 'status'); b.setAttribute('aria-live', 'polite');
   b.innerHTML = html + '<button class="mb-x" id="mb-x" aria-label="close">✕</button>'; document.body.appendChild(b); document.body.classList.add('has-map-banner');
-  b.addEventListener('click', e => { const w = e.target.closest('[data-open-world]'); if (w){ hideMapBanner(); sfx.blip(); openWorld(w.dataset.openWorld); } else if (e.target.closest('#mb-x, [data-mb-ok]')) hideMapBanner(); });
+  b.addEventListener('click', e => { const w = e.target.closest('[data-open-world]'); if (w){ hideMapBanner(); sfx.blip(); openWorld(w.dataset.openWorld); } else if (e.target.closest('[data-mb-final]')){ hideMapBanner(); sfx.blip(); openStory(); } else if (e.target.closest('#mb-x, [data-mb-ok]')) hideMapBanner(); });
   bannerTimer = setTimeout(hideMapBanner, 15000); }
 // one gentle scroll so the island is in view: a single smooth scroll, never repeated, so the player can scroll the map freely right away
 function focusIsland(i){ const c = $('#overworld'); if (!c) return; const r = c.getBoundingClientRect(), cy = 70 + i*78, y = scrollY + r.top + cy*r.height/c.height - innerHeight*.36;
@@ -186,8 +189,8 @@ function mapCelebrate(kind, to){
       <div class="mb-b"><button class="btn btn-yellow" data-open-world="${q.id}">▶ Enter World ${q.lv}</button><button class="btn btn-ghost" data-mb-ok>Later</button></div>`); }
   else { sfx.win(); confetti(160); setTimeout(() => confetti(120), 900);
     mapBanner(`<div class="mb-k">🏆 All worlds complete!</div><div class="mb-t">You beat all ${n} bosses!</div>
-      <div class="mb-s">Every island is cleared. Replay any stage to chase a high score, or hear the pieces again for golden instruments.</div>
-      <div class="mb-b"><button class="btn btn-yellow" data-mb-ok>🎉 Awesome!</button></div>`); }
+      <div class="mb-s">${S.game.finalBossBeaten ? '🥁 You won the <b>Golden Snare Drum</b>! ' : `🧙 But <b>Mr. Kurilla</b> is still waiting in World ${PIECES[n - 1].lv} for the final showdown! `}Replay any stage to chase a high score, or hear the pieces again for golden instruments.</div>
+      <div class="mb-b">${S.game.finalBossBeaten ? '' : '<button class="btn btn-pink" data-mb-final>🧙 Final showdown</button>'}<button class="btn btn-yellow" data-mb-ok>🎉 Awesome!</button></div>`); }
   focusIsland(to);
 }
 function startMapLoop(){ if (!mapRaf) mapRaf = requestAnimationFrame(mapLoop); }
@@ -205,7 +208,14 @@ function stagesHTML(id){
   const w = gw(id), rows = [0,1,2,3].map(i => { const st = stageState(id, i), done = i < 3 ? w.cleared[i] : w.boss > 0, sp = i < 3 && window.PQGame && PQGame.SPECIAL && (PQGame.SPECIAL[id] || {})[i], name = i < 3 ? `Stage ${i+1}${sp === 'ship' ? ' · 🏴‍☠️ Pirate Ship' : ''}` : '🏰 Boss Castle';
     return `<div class="stage ${st.open?'':'locked'} ${done?'done':''}"><div><b>${done?'⭐':st.open?'▶':'🔒'} ${name}</b>${st.open?'':`<div class="why">${esc(st.why)}</div>`}${done?`<div class="why">Best: ${w.best[i]} notes${i===3&&w.boss>1?` · beaten ×${w.boss}`:''}</div>`:''}</div>
       ${st.open?`<button class="btn ${i===3?'btn-pink':'btn-yellow'} play-btn" data-play="${id}" data-stage="${i}">${done?'REPLAY':'PLAY'}</button>`:''}</div>`; }).join('');
-  return `<div class="stages"><div class="lbl">🎮 Stages · ❤️ ${S.game.lives} lives</div>${rows}</div>`;
+  return `<div class="stages"><div class="lbl">🎮 Stages · ❤️ ${S.game.lives} lives</div>${rows}${id === lastPiece().id ? finalRowsHTML(id) : ''}</div>`;
+}
+// the final boss lives in the LAST world: a 5th row once that world's boss is beaten, plus "Watch the ending" after Mr. Kurilla is beaten
+function finalRowsHTML(id){
+  const st = stageState(id, 4), done = !!S.game.finalBossBeaten;
+  return `<div class="stage final ${st.open?'':'locked'} ${done?'done':''}"><div><b>${done?'🥁':st.open?'🧙':'🔒'} Final Boss: Mr. Kurilla</b>${st.open?'':`<div class="why">${esc(st.why)}</div>`}${done?`<div class="why">Golden Snare won${S.game.finalWins > 1 ? ` · beaten ×${S.game.finalWins}` : ''}</div>`:''}</div>
+      ${st.open?`<button class="btn btn-pink play-btn" data-final="1">${done?'REPLAY':'PLAY'}</button>`:''}</div>
+    ${done ? `<div class="stage done"><div><b>🎬 Watch the ending</b><div class="why">Character parade + THE END</div></div><button class="btn btn-yellow play-btn" data-ending="1">WATCH</button></div>` : ''}`;
 }
 function openWorld(id){
   const p = P[id], w = gw(id), open = worldOpen(id);
@@ -303,11 +313,12 @@ function playStage(id, i, bossHp){
   $('#game').hidden = false; $('#pause-menu').hidden = true; document.body.classList.add('in-game');
   const back = html => { $('#game').hidden = true; document.body.classList.remove('in-game'); renderAll(); startMapLoop(); if (html) openModal(html); };
   PQGame.start($('#game-canvas'), $('#game'), {
-    world:p.world, seed:p.id, level:i === 3 ? 'boss' : i, label:i === 3 ? 'BOSS' : `WORLD ${p.lv}-${i+1}`, bossName:p.boss,
-    inst:S.game.inst, hair:S.game.hair, worldNo:p.lv, lives:S.game.lives, coinBase:S.game.score % 100, bossHp:i === 3 ? bossHp : 0, golden:!!gw(id).golden, tuba, sfx:S.sound, music:S.music,
+    world:i === 4 ? Object.assign({}, p.world, { boss:'kurilla' }) : p.world, seed:p.id, level:i === 4 ? 'final' : i === 3 ? 'boss' : i, label:i === 4 ? 'FINAL BOSS' : i === 3 ? 'BOSS' : `WORLD ${p.lv}-${i+1}`, bossName:i === 4 ? 'Mr. Kurilla' : p.boss,
+    inst:S.game.inst, hair:S.game.hair, worldNo:p.lv, lives:S.game.lives, coinBase:S.game.score % 100, bossHp:i >= 3 ? bossHp : 0, golden:!!gw(id).golden, tuba, sfx:S.sound, music:S.music,
     onLifeLost:l => { S.game.lives = Math.max(0, Math.min(LIVES_MAX, l)); save(); },   // also called on a 1-UP
     onPause:pz => { $('#pause-menu').hidden = !pz; },
     onClear:r => { const w = gw(id); S.game.coins += r.coins; S.game.score += r.coins; S.game.lives = r.lives; tubaTally(r); if (r.tuba > 0) tubaCarry = { id, ammo:r.tuba };
+      if (i === 4) return finalWin(r, startLives, back);
       if (i < 3){ w.cleared[i] = true; w.best[i] = Math.max(w.best[i], r.coins); } else { w.boss++; w.best[3] = Math.max(w.best[3], r.coins); }
       const nb = checkBadges({ nosweat: r.lives >= startLives }); save(); sfx.win(); confetti(i === 3 ? 140 : 60);
       const nxtWorld = i === 3 ? PIECES[worldIdx(id) + 1] : null, firstWin = i === 3 && w.boss === 1;
@@ -317,27 +328,98 @@ function playStage(id, i, bossHp){
       back(`<div class="result"><div class="big">${i===3?'🏰 BOSS DEFEATED!':'🚩 STAGE CLEAR!'}</div><p><b>${esc(p.title)}</b> · ${i===3?esc(p.boss):`Stage ${i+1}`}<br>🪙 ${r.coins} note coins · ❤️ ${r.lives} lives</p>${r.tuba > 0 && i < 3 ? `<p>💥 Your <b>GIANT TUBA</b> (${r.tuba} bass bomb${r.tuba>1?'s':''}) comes with you to the next stage in this world!</p>` : ''}
         ${i===3 ? (nxtWorld ? `<p>🗺️ <b>World ${nxtWorld.lv}: ${esc(nxtWorld.title)}</b> is open!</p>` : '<p>🏆 You beat every world! Replay any stage to chase a high score.</p>') : i===2 ? '<p>🏰 The Boss Castle is open!</p>' : ''}
         ${badgeHTML(nb)}${next ? `<button class="btn btn-big btn-yellow" data-play="${next.id}" data-stage="${next.i}">▶ ${next.i===3?'Storm the castle':next.i===0?`Go to World ${P[next.id].lv}`:`Stage ${next.i+1}`}</button>` : ''}
-        ${i === 3 ? `<button class="btn btn-big btn-yellow" id="res-ok">🗺️ ${celebrate === 'unlock' ? `See World ${nxtWorld.lv} on the map ➜` : celebrate === 'final' ? 'See your finished map ➜' : 'Back to map'}</button>`
+        ${i === 3 ? `<button class="btn btn-big btn-yellow" id="res-ok">${celebrate === 'unlock' ? `🗺️ See World ${nxtWorld.lv} on the map ➜` : celebrate === 'final' ? (S.game.finalBossBeaten ? '🗺️ See your finished map ➜' : '🧙 Wait... someone’s coming! ➜') : '🗺️ Back to map'}</button>`
                   : `<button class="btn btn-wide btn-ghost" id="res-ok">🗺️ Back to map</button>`}</div>`);
       const ok = $('#res-ok'); if (ok) ok.onclick = closeModal;
       if (i === 3){ const to = celebrate === 'unlock' ? worldIdx(nxtWorld.id) : celebrate === 'final' ? PIECES.length - 1 : worldIdx(id);
-        modalClose = () => celebrate ? mapCelebrate(celebrate, to) : (renderAll(), focusIsland(to)); } },
+        modalClose = () => celebrate === 'final' && !S.game.finalBossBeaten ? openStory(true) : celebrate ? mapCelebrate(celebrate, to) : (renderAll(), focusIsland(to)); } },
     onGameOver:r => { S.game.coins += r.coins; S.game.lives = 0; tubaTally(r); checkBadges(); save(); sfx.over(); back(); continueScreen(id, i, r.bossHp); },
-    onQuit:r => { S.game.coins += r.coins; S.game.score += r.coins; tubaTally(r); if (r.tuba > 0) tubaCarry = { id, ammo:r.tuba }; const nb = checkBadges(); save(); back(); if (nb.length) toast('🏅 New badge: ' + nb.map(b => esc(b.n)).join(', ')); },
+    onQuit:r => { S.game.coins += r.coins; S.game.score += r.coins; tubaTally(r); if (r.tuba > 0) tubaCarry = { id, ammo:r.tuba }; const nb = checkBadges(); save(); back(); if (nb.length) toast('🏅 New badge: ' + nb.map(b => esc(b.n)).join(', ')); else if (i === 4) toast(`🧙 Mr. Kurilla is waiting for you in World ${p.lv}. Try again anytime!`); },
   });
 }
 function continueScreen(id, i, bossHp){
   let n = CONTINUE_SECS; clearInterval(contTimer);
   const finish = () => { clearInterval(contTimer); S.game.lives = START_LIVES; S.game.score = 0; save(); renderAll(); };
   modalClose = () => { clearInterval(contTimer); if (S.game.lives <= 0){ finish(); toast('GAME OVER. Your cleared stages are saved. Lives are back to 5.'); } };
-  openModal(`<div class="result continue"><div class="big">GAME OVER</div><p class="hint">Your cleared stages are saved.${i === 3 && bossHp ? ' Continue now and the boss keeps the damage you did!' : ''}</p><div class="cont-q">CONTINUE?</div><div class="cont-n" id="cont-n">${n}</div>
+  openModal(`<div class="result continue"><div class="big">GAME OVER</div><p class="hint">Your cleared stages are saved.${i >= 3 && bossHp ? ' Continue now and the boss keeps the damage you did!' : ''}</p><div class="cont-q">CONTINUE?</div><div class="cont-n" id="cont-n">${n}</div>
     <button class="btn btn-big btn-yellow" id="cont-yes">▶ YES! (${START_LIVES} lives)</button><button class="btn btn-wide btn-ghost" id="cont-no">🗺️ No, back to map</button></div>`, body => {
     body.querySelector('#cont-yes').onclick = () => { S.game.continues++; finish(); checkBadges(); save(); modalClose = null; closeModal(); playStage(id, i, bossHp); };
     body.querySelector('#cont-no').onclick = () => closeModal();
   });
   contTimer = setInterval(() => { n--; const el = $('#cont-n'); if (el) el.textContent = Math.max(0, n); sfx.tick(); if (n <= 0) closeModal(); }, 1000);
 }
-document.addEventListener('click', e => { const b = e.target.closest('[data-play]'); if (b){ modalClose = null; playStage(b.dataset.play, +b.dataset.stage); } });
+document.addEventListener('click', e => { const b = e.target.closest('[data-play]'); if (b){ modalClose = null; playStage(b.dataset.play, +b.dataset.stage); }
+  if (e.target.closest('[data-final]')){ modalClose = null; openStory(); }
+  if (e.target.closest('[data-ending]')){ modalClose = null; playEnding(false); } });
+
+// ---------- Finale: story scene → final boss (Mr. Kurilla) → ending parade → THE END → Play Again ----------
+const lastPiece = () => PIECES[PIECES.length - 1] || {};
+const NUM_WORD = ['zero','one','two','three','four','five','six','seven','eight','nine','ten'];
+const plain = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9 .!?-]/g, '').trim();
+const pauseMap = () => { closeModal(); hideMapBanner(); clearTimeout(mapRaf); cancelAnimationFrame(mapRaf); mapRaf = 0; mapFx = null; document.body.classList.add('in-game'); };
+const resumeMap = () => { document.body.classList.remove('in-game'); renderAll(); startMapLoop(); };
+let story = null, fin = null, storyFirst = false;   // storyFirst: opened straight from the last world's first boss win
+function storyLines(){ const n = NUM_WORD[PIECES.length] || PIECES.length; return [
+  { who:'kurilla', t:`Well, well, well... look who made it through all ${n} worlds!` },
+  { who:'hero', t:'Mr. Kurilla?! Why are you dressed like a wizard?' },
+  { who:'kurilla', t:`I am the Maestro of this quest! You beat all ${n} worlds... but to win the <b>GOLDEN SNARE DRUM</b>, you have to beat ME!`, drum:true },
+  { who:'hero', t:'Bring it on! I’ve been practicing!', cheer:true },
+  { who:'kurilla', t:'Let’s see if you can keep the beat! Ready... and a one, two, three, four!' } ]; }
+function openStory(first){
+  storyFirst = first === true; if (!S.game.inst) return heroPicker(openStory);
+  const st = stageState(lastPiece().id, 4); if (!st.open){ toast('🔒 ' + st.why); return; }
+  pauseMap(); const lines = storyLines(), ctl = PQFinale.story($('#story-canvas'), { inst:S.game.inst, hair:S.game.hair });
+  $('#story').hidden = false; $('#talk').hidden = false; $('#story-go').hidden = true; $('#story-skip').hidden = false;
+  story = { ctl, n:-1, lines, ready:false,
+    next(){ if (this.ready) return; if (this.n >= lines.length - 1) return this.done(); const L = lines[++this.n]; ctl.set(L);
+      const who = $('#talk-who'); who.textContent = L.who === 'hero' ? (S.name || 'You') : '🧙 Mr. Kurilla'; who.className = 'talk-who' + (L.who === 'hero' ? ' hero' : '');
+      $('#talk-text').innerHTML = L.t; sfx.blip(); },
+    done(){ this.ready = true; ctl.set({ who:'kurilla', drum:true, cheer:true }); $('#talk').hidden = true; $('#story-skip').hidden = true; $('#story-go').hidden = false; sfx.unlock(); } };
+  story.next();
+}
+function closeStory(){ if (!story) return; story.ctl.stop(); story = null; $('#story').hidden = true; }
+$('#talk').onclick = () => story && story.next();
+$('#talk').onkeydown = e => { if (story && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); story.next(); } };
+$('#story-skip').onclick = () => story && story.done();
+$('#story-fight').onclick = () => { closeStory(); playStage(lastPiece().id, 4); };
+$('#story-later').onclick = () => { closeStory(); resumeMap(); if (storyFirst) mapCelebrate('final', PIECES.length - 1); else toast(`🧙 Mr. Kurilla is waiting for you in World ${lastPiece().lv}.`); };
+function finalWin(r, startLives, back){
+  const first = !S.game.finalBossBeaten; S.game.finalBossBeaten = true; S.game.finalWins = (S.game.finalWins || 0) + 1;
+  const nb = checkBadges({ nosweat: r.lives >= startLives }); save(); sfx.win(); confetti(180); setTimeout(() => confetti(120), 900);
+  back(`<div class="result"><div class="big">🥁 YOU WON!</div><canvas id="res-drum" class="res-drum" width="24" height="20" aria-label="golden snare drum"></canvas>
+    <p><b>Mr. Kurilla</b> is defeated!<br>The <b>GOLDEN SNARE DRUM</b> is yours!<br>🪙 ${r.coins} note coins · ❤️ ${r.lives} lives</p>${badgeHTML(nb)}
+    <button class="btn btn-big btn-yellow" id="res-ok">🎉 Celebrate! ➜</button></div>`);
+  const c = $('#res-drum'); if (c){ const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(PQSprites.snare(), 0, 0); }
+  $('#res-ok').onclick = closeModal; modalClose = () => playEnding(first);
+}
+const ENEMY_NAME = { imp:'Frost Imp', chicken:'Rubber Chicken', ginger:'Gingerbread Grunt', wisp:'Star Wisp', ghost:'Tango Ghost', gremlin:'Sour-Note Gremlin' };
+const BOSS_NAME = { valkyrie:'Skadi the Valkyrie', cluckzilla:'Admiral Cluckzilla', santa:'Santa the Barbarian', dragon:'Deja Vu Dragon', spectro:'Senor Spectro', golem:'Stone Golem' };
+function finaleCast(){
+  const inst = S.game.inst || 'sax', hair = S.game.hair || 'short', worlds = PIECES.map(p => p.world || {});
+  const ens = [...new Set(worlds.map(w => w.enemy).filter(Boolean))], bos = [...new Set(worlds.map(w => w.boss).filter(Boolean))];
+  const bossName = k => BOSS_NAME[k] || plain((PIECES.find(p => (p.world || {}).boss === k) || {}).boss) || k;
+  const guests = [...(ens.includes('gremlin') ? [] : [{ kind:'enemy', type:'gremlin', name:ENEMY_NAME.gremlin }]), ...(bos.includes('golem') ? [] : [{ kind:'boss', type:'golem', name:BOSS_NAME.golem }])];
+  return [
+    { title:'STARRING', cols:1, list:[{ kind:'hero', inst, hair, gold:PIECES.some(p => gw(p.id).golden), big:true, name:plain(S.name) || 'You' }] },
+    { title:'THE BAND', cols:3, list:Object.keys(INST_NAME).map((k, i) => ({ kind:'hero', inst:k, hair:i % 2 ? 'long' : 'short', name:INST_NAME[k] })) },
+    { title:'WORLD BADDIES', cols:3, list:ens.map(k => ({ kind:'enemy', type:k, name:ENEMY_NAME[k] || plain(k) })) },
+    { title:'TROUBLEMAKERS', cols:2, list:[['dino', 'Mr. Dinosaur'], ['meep', 'Meep'], ['dragon', 'Sparky the Dragon'], ['hedgehog', 'Hedgehog Archer']].map(([type, name]) => ({ kind:'enemy', type, name })) },
+    { title:'THE BOSSES', cols:3, list:bos.map(k => ({ kind:'boss', type:k, name:bossName(k) })) },
+    ...(guests.length ? [{ title:'SPECIAL GUESTS', cols:2, list:guests }] : []),
+    { title:'AND THE MAESTRO', cols:2, list:[{ kind:'wizard', name:'Mr. Kurilla' }, { kind:'drum', name:'The Golden Snare' }] },
+  ];
+}
+function playEnding(first){
+  pauseMap(); if (fin){ fin.ctl.stop(); PQGame.finale.stop(); }
+  const cast = finaleCast(); $('#finale').hidden = false; $('#finale-end').hidden = true; $('#finale-skip').hidden = false;
+  $('#credits-list').innerHTML = cast.map(g => `<li>${esc(g.title)}: ${g.list.map(c => esc(c.name)).join(', ')}</li>`).join('');
+  PQGame.finale.start(S.music);
+  const ctl = PQFinale.credits($('#finale-canvas'), cast, { onEnd:() => { $('#finale-end').hidden = false; $('#finale-skip').hidden = true; $('#finale-again').focus(); } });
+  fin = { ctl, first, cast };
+}
+$('#finale-skip').onclick = () => fin && fin.ctl.skip();
+$('#finale-again').onclick = () => { if (!fin) return; const first = fin.first; fin.ctl.stop(); PQGame.finale.stop(); fin = null; $('#finale').hidden = true; sfx.blip();
+  resumeMap(); if (first) mapCelebrate('final', PIECES.length - 1); else focusIsland(PIECES.length - 1); };
 $('#btn-pause').onclick = () => PQGame.togglePause();
 $('#pm-resume').onclick = () => PQGame.togglePause(false);
 $('#pm-quit').onclick = () => { if (confirm('Quit this stage and go back to the map?')) PQGame.quit(); };
@@ -403,6 +485,8 @@ if (new URLSearchParams(location.search).has('teacher')){
 $('#welcome-form').onsubmit = e => { e.preventDefault(); const n = cleanName($('#nick').value); if (!n) return; S.name = n; save(); startApp(); confetti(40); };
 if (S.name) startApp(); else $('#screen-welcome').hidden = false;
 if ('serviceWorker' in navigator && location.protocol !== 'file:') addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
-window.__PQ = { get state(){ return S; }, PIECES, listenTick, get listen(){ return listen && { id:listen.id, api:listen.api, playing:listen.playing }; } };
+window.__PQ = { get state(){ return S; }, PIECES, listenTick, openStory, playEnding, finaleCast, finaleStep(sec){ if (fin) for (let i = 0; i < sec*30; i++) fin.ctl.step(1/30); },
+  get finale(){ return { story:story && { n:story.n, lines:story.lines.length, ready:story.ready, who:story.ctl.state.who, drum:story.ctl.state.drum },
+    credits:fin && { phase:fin.ctl.state.phase, t:fin.ctl.state.t, total:fin.ctl.total, shown:[...fin.ctl.state.shown], cast:fin.cast.map(g => g.list.map(c => c.name)).flat() }, music:PQGame.finale.playing }; }, get listen(){ return listen && { id:listen.id, api:listen.api, playing:listen.playing }; } };
 if (USING_DRAFT && S.name) toast('🧪 Teacher preview: showing draft worlds on this phone only.');
 })();
