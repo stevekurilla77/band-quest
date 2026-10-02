@@ -623,7 +623,12 @@ function syncTubaUI(){ if (!uiRoot || !G) return; const st = G.tuba > 0 ? G.tuba
 // ---------- game state ----------
 let G = null, raf = 0, last = 0, acc = 0, pausedCb = null;
 const BOSS_CFG = {
-  valkyrie:{ move:'fly', shot:'spear' }, cluckzilla:{ move:'hop', shot:'egg' }, santa:{ move:'walk', shot:'axe' },
+  // World 1 is the first boss kids meet, so the Valkyrie is tuned gentler than the rest (v22): 18 HP instead of 24, slower patrol/dives/spears,
+  // a 0.8 s flashing "!" wind-up (with a floor marker where she'll land) before every dive, a 1.5 s dizzy rest on the floor after it
+  // (touching her then doesn't hurt — free stomps), a softer rage at half HP, and two heart drops (at 2/3 and 1/3 HP) instead of one.
+  // Any field left out = the original numbers, so every other boss is unchanged.
+  valkyrie:{ move:'fly', shot:'spear', hp:18, rage:1.15, patrol:40, gap:2.0, swoopP:.55, windup:.8, dive:120, minDown:45, rest:1.5, spear:110, hearts:[2/3, 1/3] },
+  cluckzilla:{ move:'hop', shot:'egg' }, santa:{ move:'walk', shot:'axe' },
   dragon:{ move:'hover', shot:'fire' }, spectro:{ move:'dance', shot:'orb' }, golem:{ move:'walk', shot:'rock' },
   kurilla:{ move:'wizard', shot:'note' },   /* the final boss (see updateWizard) */
 };
@@ -648,8 +653,8 @@ function resetLevel(first){
   G.cam = clamp(G.p.x - 100, 0, Math.max(0, G.L.w*TS - W));
   G.movers = (b.movers || []).map(m => ({ ...m, bx:m.x, by:m.y, t:0, dx:0, dy:0 })); G.cannons = (b.cannons || []).map(c => ({ ...c, cool:1.2, warn:0 })); G.spawners = (b.spawners || []).map(q => ({ ...q, cool:.6 }));
   if (b.auto){ G.cam = clamp(G.p.x - 48, 0, Math.max(0, G.L.w*TS - W)); G.autoWait = SHIP.wait; }
-  if (G.boss){ const k = (G.opts.world && G.opts.world.boss) || 'golem', cfg = BOSS_CFG[k] || BOSS_CFG.golem, hp = (!first && G.B && G.B.hp > 0) ? G.B.hp : Math.min(24, Math.max(1, G.opts.bossHp || 24));
-    G.B = { key:k, cfg, x:11*TS, y:7*TS, w:28, h:28, vx:0, vy:0, hp, maxHp:24, t:0, timer:1.5, state:'intro', face:-1, inv:0, onGround:false, gone:0, minions:0 };
+  if (G.boss){ const k = (G.opts.world && G.opts.world.boss) || 'golem', cfg = BOSS_CFG[k] || BOSS_CFG.golem, maxHp = cfg.hp || 24, hp = (!first && G.B && G.B.hp > 0) ? Math.min(maxHp, G.B.hp) : Math.min(maxHp, Math.max(1, G.opts.bossHp || maxHp));
+    G.B = { key:k, cfg, x:11*TS, y:7*TS, w:28, h:28, vx:0, vy:0, hp, maxHp, t:0, timer:1.5, state:'intro', face:-1, inv:0, onGround:false, gone:0, minions:0 };
     G.msg = { text:'BOSS: ' + (G.opts.bossName || 'BOSS'), t:2 }; }
   else G.msg = { text:b.auto ? 'ALL ABOARD!' : (G.opts.label || 'READY!'), t:1.6 };
 }
@@ -871,9 +876,9 @@ function updateBoss(dt){
   if (B.gone){ B.gone -= dt; if (Math.random() < .5) puff(B.x + Math.random()*28, B.y + Math.random()*28, ['#ffd23f','#ff4f79','#ffffff'][Math.floor(Math.random()*3)], 2, 90);
     if (B.gone <= 0 && !p.clear){ p.clear = 2.6; sfx('clear'); } return; }
   B.t += dt; B.timer -= dt; B.inv = Math.max(0, B.inv - dt);
-  const left = 1.2*TS, right = 14.8*TS - B.w, floor = 12*TS - B.h, toward = Math.sign(p.x - B.x) || 1, hpF = B.hp/B.maxHp, fast = hpF < .5 ? 1.35 : 1;
+  const left = 1.2*TS, right = 14.8*TS - B.w, floor = 12*TS - B.h, toward = Math.sign(p.x - B.x) || 1, hpF = B.hp/B.maxHp, fast = hpF < .5 ? (B.cfg.rage || 1.35) : 1;
   const throwShot = () => { const k = B.cfg.shot, cx = B.x + B.w/2, cy = B.y + B.h/2, dx = p.x - cx, dy = p.y - cy, d = Math.hypot(dx, dy) || 1;
-    if (k === 'spear') G.eshots.push({ kind:k, x:cx, y:cy, vx:dx/d*150, vy:dy/d*150, t:0 });
+    if (k === 'spear'){ const v = B.cfg.spear || 150; G.eshots.push({ kind:k, x:cx, y:cy, vx:dx/d*v, vy:dy/d*v, t:0 }); }
     if (k === 'egg') for (const s of [-1, 1]) G.eshots.push({ kind:k, x:cx, y:B.y + B.h - 6, vx:s*(70 + Math.random()*60), vy:-260, grav:700, t:0 });
     if (k === 'axe') G.eshots.push({ kind:k, x:cx, y:cy - 8, vx:toward*(110 + Math.abs(dx)*.25), vy:-300, grav:700, t:0 });
     if (k === 'fire') for (const a of (hpF < .5 ? [-.25, 0, .25] : [0])) G.eshots.push({ kind:k, x:cx, y:cy, vx:Math.cos(Math.atan2(dy, dx) + a)*140, vy:Math.sin(Math.atan2(dy, dx) + a)*140, t:0 });
@@ -882,10 +887,18 @@ function updateBoss(dt){
   };
   if (B.state === 'intro'){ if (B.timer <= 0){ B.state = 'fight'; B.timer = 1.2; } }
   else switch (B.cfg.move){
-    case 'fly': if (B.mode !== 'swoop'){ B.y += ((36 + Math.sin(B.t*2)*10) - B.y)*Math.min(1, dt*3); B.x += (B.vx ||= 50)*fast*dt; if (B.x < left || B.x > right) B.vx = -B.vx; B.x = clamp(B.x, left, right);
-        if (B.timer <= 0){ if (Math.random() < .45){ B.mode = 'swoop'; B.swoopT = 0; const ty = p.y > B.y + 24 ? p.y : floor, d = Math.hypot(p.x - B.x, ty - B.y) || 1; B.svx = (p.x - B.x)/d*170*fast; B.svy = Math.max(60*fast, (ty - B.y)/d*170*fast); } else throwShot(); B.timer = 1.6/fast; } }
-      else { B.swoopT = (B.swoopT || 0) + dt; B.x = clamp(B.x + B.svx*dt, left, right); B.y += Math.max(40, B.svy || 0)*dt; if (B.y >= floor || B.swoopT > 2.5){ if (B.y >= floor){ B.y = floor; G.shake = .15; } B.mode = ''; } }
-      break;
+    case 'fly': { const C = B.cfg, aim = () => { const ty = B.ty ?? floor, tx = B.tx ?? p.x, d = Math.hypot(tx - B.x, ty - B.y) || 1, v = (C.dive || 170)*fast;
+        B.mode = 'swoop'; B.swoopT = 0; B.svx = (tx - B.x)/d*v; B.svy = Math.max((C.minDown || 60)*fast, (ty - B.y)/d*v); };   // dives ALWAYS go down
+      if (B.mode === 'warn'){ B.warnT -= dt; B.y += (30 - B.y)*Math.min(1, dt*4); if (B.warnT <= 0){ aim(); sfx('bump'); } }          // wind-up: rises a little, flashes, "!"
+      else if (B.mode === 'swoop'){ B.swoopT = (B.swoopT || 0) + dt; B.x = clamp(B.x + B.svx*dt, left, right); B.y += Math.max(40, B.svy || 0)*dt;
+        if (B.y >= floor || B.swoopT > 3.5){ const landed = B.y >= floor; if (landed){ B.y = floor; G.shake = .15; } B.tx = B.ty = undefined;
+          if (landed && C.rest){ B.mode = 'rest'; B.restT = C.rest; } else B.mode = ''; } }
+      else if (B.mode === 'rest'){ B.restT -= dt; B.y = floor; if (B.restT <= 0){ B.mode = ''; B.timer = Math.max(B.timer, .7); } }      // dizzy on the floor = free hits
+      else { B.y += ((36 + Math.sin(B.t*2)*10) - B.y)*Math.min(1, dt*3); B.x += (B.vx ||= (C.patrol || 50))*fast*dt; if (B.x < left || B.x > right) B.vx = -B.vx; B.x = clamp(B.x, left, right);
+        if (B.timer <= 0){ if (Math.random() < (C.swoopP || .45)){ B.ty = p.y > B.y + 24 ? Math.min(p.y, floor) : floor; B.tx = clamp(p.x, left, right);
+            if (C.windup){ B.mode = 'warn'; B.warnT = C.windup; sfx('windup'); } else aim(); }
+          else throwShot(); B.timer = (C.gap || 1.6)/fast; } }
+      break; }
     case 'hover': B.y += ((96 + Math.sin(B.t*1.6)*22) - B.y)*Math.min(1, dt*2); B.x += (B.vx ||= 40)*fast*dt; if (B.x < left || B.x > right) B.vx = -B.vx; B.x = clamp(B.x, left, right);
       if (B.timer <= 0){ throwShot(); B.timer = 1.3/fast; } break;
     case 'dance': { const cx = 7.5*TS - B.w/2; B.x = cx + Math.sin(B.t*.9*fast)*80; B.y = 98 + Math.sin(B.t*1.8*fast)*24;
@@ -905,24 +918,24 @@ function updateBoss(dt){
   B.face = toward;
   const hb = { x:B.x + 2, y:B.y + 2, w:B.w - 4, h:B.h - 2 };
   if (B.state !== 'intro' && !B.ghost) for (const s of G.shots) if (!s.dead && overlap({ x:s.x, y:s.y, w:6, h:6 }, hb)){ s.dead = 1; damageBoss(1); }
-  const harmless = B.cfg.move === 'wizard' && (B.ghost || B.mode === 'rest' || B.mode === 'drop');   /* a fading or dizzy wizard never hurts on touch */
+  const harmless = (B.cfg.move === 'wizard' && (B.ghost || B.mode === 'rest' || B.mode === 'drop')) || (B.cfg.move === 'fly' && B.mode === 'rest');   /* a fading or dizzy wizard never hurts on touch */
   if (!p.dead && B.state !== 'intro' && overlap(p, hb)){
     if (p.vy > 30 && p.y + p.h - hb.y < 16 && !B.ghost){ p.vy = -330; damageBoss(3); if (B.cfg.move === 'walk'){ B.inv = 1; B.charge = .9; } if (B.cfg.move === 'wizard' && B.hp > 0){ B.mode = 'out'; B.timer = .5; } } else if (!harmless) hurt('boss'); }
 }
 // boss safety net (all bosses): never NaN, never above the top of the screen or under the floor, never outside the arena walls,
 // and if it is somehow out of the camera view for more than 2 s it is put back in the middle of the arena.
 const BOSS_HOME_Y = { fly:36, hover:96, dance:98, wizard:44 };
-function bossHome(B, floor){ B.x = 7.5*TS - B.w/2; B.y = BOSS_HOME_Y[B.cfg.move] ?? floor; B.vx = B.vy = 0; B.svx = B.svy = 0; B.mode = ''; B.charge = 0; B.timer = Math.max(B.timer, 1); B.offT = 0; }
+function bossHome(B, floor){ B.x = 7.5*TS - B.w/2; B.y = BOSS_HOME_Y[B.cfg.move] ?? floor; B.vx = B.vy = 0; B.svx = B.svy = 0; B.mode = ''; B.tx = B.ty = undefined; B.charge = 0; B.timer = Math.max(B.timer, 1); B.offT = 0; }
 function keepBossInArena(B, dt, left, right, floor){ const top = 6;
   if (!Number.isFinite(B.x) || !Number.isFinite(B.y) || !Number.isFinite(B.vx || 0) || !Number.isFinite(B.vy || 0)){ bossHome(B, floor); return; }
   B.x = clamp(B.x, left, right);
-  if (B.y < top){ B.y = top; if (B.vy < 0) B.vy = 0; if (B.mode === 'swoop' && B.svy < 0) B.mode = ''; }
-  if (B.y > floor){ B.y = floor; if (B.vy > 0) B.vy = 0; B.onGround = true; if (B.mode === 'swoop'){ B.mode = ''; } }
+  if (B.y < top){ B.y = top; if (B.vy < 0) B.vy = 0; if ((B.mode === 'swoop' && B.svy < 0) || B.mode === 'rest') B.mode = ''; }
+  if (B.y > floor){ B.y = floor; if (B.vy > 0) B.vy = 0; B.onGround = true; if (B.mode === 'swoop'){ B.mode = ''; B.tx = B.ty = undefined; } }
   const seen = B.x + B.w > G.cam && B.x < G.cam + W && B.y + B.h > 0 && B.y < H;
   B.offT = seen ? 0 : (B.offT || 0) + dt;
   if (B.offT > 2){ bossHome(B, floor); puff(B.x + B.w/2, B.y + B.h/2, '#ffffff', 6); } }
 function damageBoss(n, force){ const B = G.B; if ((B.inv > 0 && !force) || B.gone) return; const before = B.hp; B.hp = Math.max(0, B.hp - n); B.inv = n > 1 ? .5 : .08; sfx('bossHit'); puff(B.x + 14, B.y + 14, '#ffffff', 4);
-  if (before > B.maxHp/2 && B.hp <= B.maxHp/2) G.pickups.push({ x:7.5*TS, y:20, vy:0 });
+  for (const f of (B.cfg.hearts || [.5])) if (before > B.maxHp*f && B.hp <= B.maxHp*f) G.pickups.push({ x:7.5*TS, y:20, vy:0 });   // mid-fight heart drop(s)
   if (B.hp <= 0){ B.gone = 2; G.eshots = []; Music.stop(); sfx('boom'); G.shake = .6; G.enemies.forEach(e => e.alive && kill(e)); } }
 function finish(kind){ if (G.done) return; G.done = true; Music.stop(); releaseInput(); const o = G.opts, r = { coins:G.coins, lives:G.lives, bossHp:G.B ? G.B.hp : 0, tuba:G.p.dead ? 0 : G.tuba, tubaKO:G.tubaKO };
   const run = G; setTimeout(() => { if (G === run) stop(); if (kind === 'clear') o.onClear && o.onClear(r); else if (kind === 'gameover') o.onGameOver && o.onGameOver(r); else o.onQuit && o.onQuit(r); }, kind === 'clear' ? 200 : 600); }
@@ -970,7 +983,11 @@ function draw(){
   if (G.B && G.B.key === 'kurilla' && (!G.B.gone || G.B.gone > 1)) drawWizardBoss(x, G.B, cam);
   else if (G.B && (!G.B.gone || G.B.gone > 1)){ const B = G.B, f = SP.bossFrames(B.key); const img = B.inv > 0 && Math.floor(G.t*30) % 2 ? f.hit : (B.face > 0 ? f.r : f.l);
     x.globalAlpha = B.ghost ? .35 + Math.sin(G.t*30)*.15 : 1; const bob = B.cfg.move === 'fly' || B.cfg.move === 'hover' || B.cfg.move === 'dance' ? Math.round(Math.sin(G.t*6)*2) : 0;
-    x.drawImage(img, Math.round(B.x - cam - 2), Math.round(B.y - 4 + bob)); x.globalAlpha = 1; }
+    const warn = B.mode === 'warn', flash = warn && Math.floor(G.t*(B.warnT < .3 ? 24 : 12)) % 2;
+    x.drawImage(flash ? f.hit : img, Math.round(B.x - cam - 2), Math.round(B.y - 4 + bob)); x.globalAlpha = 1;
+    if (warn){ alertBubble(x, Math.round(B.x - cam + B.w/2), Math.round(B.y - 6 + bob), B.warnT);                       // dive telegraph: "!" + where she'll land
+      if (B.tx != null && Math.floor(G.t*12) % 2){ const mx = Math.round(clamp(B.tx, 1.2*TS, 14.8*TS - B.w) + B.w/2 - cam), my = 12*TS - 3; x.fillStyle = '#e83a4a'; x.fillRect(mx - 6, my, 12, 2); x.fillRect(mx - 3, my - 3, 6, 2); x.fillRect(mx - 1, my - 6, 2, 2); } }
+    if (B.mode === 'rest'){ x.fillStyle = '#ffd23f'; for (let i = 0; i < 3; i++){ const a = G.t*6 + i*2.1; x.fillRect(Math.round(B.x - cam + B.w/2 + Math.cos(a)*11) - 1, Math.round(B.y - 7 + Math.sin(a)*3) - 1, 3, 3); } } }
   // enemy shots
   for (const s of G.eshots){ const sx = Math.round(s.x - cam), sy = Math.round(s.y);
     switch (s.kind){
