@@ -204,7 +204,7 @@ $('#overworld').addEventListener('click', e => {
 function renderAll(){ renderHUD(); renderMap(); }
 
 // ---------- World screen (stage list + "Hear the piece") ----------
-const SPECIAL_NAME = { ship:'🏴‍☠️ Pirate Ship', barn:'🐔 Inside the Barn', coop:'🥚 In the Chicken Coop', workshop:'🎁 Santa’s Workshop', port:'⚓ Reindeer Harbor', sky:'☁️ Sky Islands' };
+const SPECIAL_NAME = { ship:'🏴‍☠️ Pirate Ship', barn:'🐔 Inside the Barn', coop:'🥚 In the Chicken Coop', workshop:'🎁 Santa’s Workshop', port:'⚓ Reindeer Harbor', sky:'☁️ Sky Islands', moat:'🌙 The Moonlit Moat', armory:'🛡️ The Knight’s Closet' };
 function stagesHTML(id){
   const w = gw(id), rows = [0,1,2,3].map(i => { const st = stageState(id, i), done = i < 3 ? w.cleared[i] : w.boss > 0, sp = i < 3 && window.PQGame && PQGame.SPECIAL && (PQGame.SPECIAL[id] || {})[i], name = i < 3 ? `Stage ${i+1}${SPECIAL_NAME[sp] ? ' · ' + SPECIAL_NAME[sp] : ''}` : '🏰 Boss Castle';
     return `<div class="stage ${st.open?'':'locked'} ${done?'done':''}"><div><b>${done?'⭐':st.open?'▶':'🔒'} ${name}</b>${st.open?'':`<div class="why">${esc(st.why)}</div>`}${done?`<div class="why">Best: ${w.best[i]} notes${i===3&&w.boss>1?` · beaten ×${w.boss}`:''}</div>`:''}</div>
@@ -418,7 +418,7 @@ function finaleCast(){
     { title:'STARRING', cols:1, list:[{ kind:'hero', inst, hair, gold:PIECES.some(p => gw(p.id).golden), big:true, name:plain(S.name) || 'You' }] },
     { title:'THE BAND', cols:3, list:Object.keys(INST_NAME).map((k, i) => ({ kind:'hero', inst:k, hair:i % 2 ? 'long' : 'short', name:INST_NAME[k] })) },
     { title:'WORLD BADDIES', cols:3, list:ens.map(k => ({ kind:'enemy', type:k, name:ENEMY_NAME[k] || plain(k) })) },
-    { title:'TROUBLEMAKERS', cols:2, list:[['dino', 'Mr. Dinosaur'], ['meep', 'Meep'], ['dragon', 'Burney'], ['hedgehog', 'Hedgehog Archer'], ['frog', 'Froppy'], ['reindeer', 'Comet the Antler-Tosser']].map(([type, name]) => ({ kind:'enemy', type, name })) },
+    { title:'TROUBLEMAKERS', cols:3, list:[['dino', 'Mr. Dinosaur'], ['meep', 'Meep'], ['dragon', 'Burney'], ['hedgehog', 'Hedgehog Archer'], ['frog', 'Froppy'], ['reindeer', 'Comet the Antler-Tosser'], ['skeleton', 'Splashbones'], ['armor', 'Sir Clanks-a-Lot']].map(([type, name]) => ({ kind:'enemy', type, name })) },
     { title:'THE BOSSES', cols:3, list:bos.map(k => ({ kind:'boss', type:k, name:bossName(k) })) },
     ...(guests.length ? [{ title:'SPECIAL GUESTS', cols:2, list:guests }] : []),
     { title:'AND THE MAESTRO', cols:2, list:[{ kind:'wizard', name:'Mr. Kurilla' }, { kind:'drum', name:'The Golden Snare' }] },

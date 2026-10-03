@@ -15,7 +15,9 @@ const ENEMY_KIND = {
   dragon:  { w:14, h:12, wave:true, speed:34 },       // Burney the little dragon: flies in a wave
   hedgehog:{ w:14, h:10, archer:true, speed:8 },      // hedgehog archer: shuffles, winds up, throws a slow toy arrow
   frog:    { w:14, h:13, thrower:true, speed:0 },
-  reindeer:{ w:14, h:14, antler:true, speed:0 },    // Comet the Antler-Tosser (World 3-3 Reindeer Harbor): lowers his head, then throws his antlers like a boomerang     // Froppy (World 3 workshop): winds up with a piano over his head, then lobs it
+  reindeer:{ w:14, h:14, antler:true, speed:0 },     // Comet the Antler-Tosser (World 3-3 Reindeer Harbor): lowers his head, then throws his antlers like a boomerang     // Froppy (World 3 workshop): winds up with a piano over his head, then lobs it
+  skeleton:{ w:12, h:17, skeleton:true, speed:0 },     // Splashbones the moat skeleton (World 5-2): hides in the moat, ripples, leaps onto the raft, rattles at you, dives back in
+  armor:   { w:14, h:20, hp:2, armor:true, speed:16 }, // Sir Clanks-a-Lot (World 5-3): an empty suit of armor that clanks around and lunges with his sword (2 notes or 1 stomp)
 };
 // Froppy's pianos: wind-up 0.9 s ("!" + the piano lifted + a blinking shadow where it will land), a slow 1.25 s arc, one piano at a time,
 // a long cooldown, only while he's on screen and the hero isn't right next to him. Notes pop a piano, a stomp bounces off it, a bass bomb smashes it.
@@ -26,6 +28,17 @@ const PIANO = { range:176, min:36, rise:90, wind:.9, flight:1.25, grav:480, cool
 // vanishing clouds (World 4-2 sky): they shake for 0.8 s after you step on them, vanish, and come back 2.6 s later
 const VANISH = { shake:.8, gone:2.6 };
 // hedgehog fairness: only throws at a hero who is on screen and not too close, warns first (wind-up + "!"), one arrow at a time, long cooldown
+// World 5-2 The Moonlit Moat (raft ride). The hero's log raft is a 'drift' mover locked to the scrolling screen between stone landings;
+// at each landing the screen waits until the hero hops onto the next raft. Falling into the moat = a pit.
+const MOAT = { speed:30, deck:191, water:200, raftW:112, off:64, lead:236, eoff:196, ew:40 };
+// Splashbones: 1 s of ripples + bubbles (and two glowing eyes) where he'll come up, then he leaps out beside the raft and lands on it,
+// rattles toward the hero for 2.4 s, then dives back in; 2.2 s under water between leaps, at most 3 leaps each, only while the hero rides a raft.
+const SKEL = { ripple:1.0, vy:-330, grav:900, vx:46, board:2.4, walk:20, cool:2.2, first:.6, leaps:3 };
+// raft raiders (Meep, Mr. Dinosaur, Burney, a hedgehog in little tub boats beside the raft): 0.9 s wind-up ("!" + a bubble swelling at the mouth),
+// then one slow bubble (40 px/s) at the hero; one bubble at a time, 3.6 s apart. Notes pop bubbles, a stomp bounces off one, the tuba pops them.
+const BUBBLE = { wind:.9, speed:40, life:5, cool:3.6, range:190, min:30, r:6, first:1.2 };
+// Sir Clanks-a-Lot: clanks back and forth, then raises his sword ("!") for 0.7 s and lunges ~2 tiles, then rests 1.2 s (safe to stomp)
+const ARMOR = { speed:16, range:104, min:18, rise:30, wind:.7, dash:90, lunge:.38, rest:1.2, cool:2.6, first:1.5 };
 const ARCHER = { range:168, min:30, rise:56, wind:.8, cool:2.8, speed:72, life:3.2, first:1.6 };
 
 // ---------- themes ----------
@@ -166,6 +179,29 @@ function backgrounds(th){
         f.fillStyle = '#9ad08a'; f.fillRect(ix, iy, iw, 4); f.fillStyle = '#b0a0c8'; for (let r = 0; r < 10; r++) f.fillRect(ix + Math.round(r*iw/22), iy + 4 + r, Math.max(1, iw - Math.round(r*iw/11)), 1); }
       for (let x = 0; x < 512; x++){ const h = 44 + Math.round(Math.sin(x/37)*6 + Math.sin(x/13 + 2)*3); f.fillStyle = '#eaf6ff'; f.fillRect(x, H - h, 1, h); f.fillStyle = '#ffffff'; f.fillRect(x, H - h, 1, 2); f.fillStyle = '#cfe4fa'; f.fillRect(x, H - h + 20, 1, h - 20); }
       break; }
+    case 'moatcastle': {   /* the haunted castle at midnight: a huge moon, towers with pointy roofs and lit windows, bats */
+      f.fillStyle = 'rgba(255,246,200,.08)'; for (let r = -40; r <= 40; r++){ const hw = Math.round(Math.sqrt(1600 - r*r)); f.fillRect(380 - hw, 48 + r, hw*2, 1); }
+      f.fillStyle = '#fff6c8'; for (let r = -22; r <= 22; r++){ const hw = Math.round(Math.sqrt(484 - r*r)); f.fillRect(380 - hw, 48 + r, hw*2, 1); } f.fillStyle = '#e8dca8'; f.fillRect(370, 40, 6, 5); f.fillRect(388, 54, 8, 6); f.fillRect(376, 60, 4, 3);
+      const c = '#1c1640'; f.fillStyle = c; f.fillRect(0, H - 96, 512, 96); for (let x = 0; x < 512; x += 12) f.fillRect(x, H - 102, 7, 6);   // curtain wall + battlements
+      for (const [tx, tw, th2] of [[30, 26, 150], [150, 34, 176], [250, 22, 136], [330, 40, 190], [450, 28, 156]]){ f.fillStyle = c; f.fillRect(tx, H - th2, tw, th2);
+        for (let r = 0; r < 26; r++){ const hw = Math.round((r/26)*(tw/2 + 4)); f.fillStyle = '#2a1e5a'; f.fillRect(tx + tw/2 - hw, H - th2 - 26 + r, hw*2, 1); }   // pointy roof
+        f.fillStyle = '#ffd23f'; for (let wy = H - th2 + 16; wy < H - 104; wy += 28) f.fillRect(tx + tw/2 - 2, wy, 4, 6); f.fillStyle = '#c0283a'; f.fillRect(tx + tw/2, H - th2 - 38, 1, 12); f.fillRect(tx + tw/2 + 1, H - th2 - 38, 7, 4); }
+      f.fillStyle = '#ffd23f'; for (let i = 0; i < 14; i++) f.fillRect(Math.floor(R()*512), H - 86 + Math.floor(R()*40), 3, 4);
+      f.fillStyle = '#0e0a24'; for (const [bx, by] of [[90, 60], [210, 40], [300, 74], [470, 30]]){ f.fillRect(bx - 4, by, 9, 2); f.fillRect(bx - 6, by - 2, 3, 2); f.fillRect(bx + 4, by - 2, 3, 2); f.fillRect(bx - 1, by + 2, 3, 1); }   // bats
+      break; }
+    case 'armorywall': {   /* stone castle wall: arched windows with the moon, royal banners with crests, crossed swords behind shields */
+      for (let y = 0; y < H; y += 12) for (let x = ((y/12) % 2)*14 - 14; x < 512 + 28; x += 28){ f.fillStyle = '#2e2838'; f.fillRect(x, y, 27, 11); f.fillStyle = '#383246'; f.fillRect(x, y, 27, 1); }
+      for (const wx of [60, 316]){ f.fillStyle = '#14102a'; f.fillRect(wx - 3, 40, 38, 74); for (let r = 0; r < 19; r++){ const hw = Math.round(Math.sqrt(361 - (19 - r)**2)); f.fillRect(wx + 16 - hw - 3, 21 + r, hw*2 + 6, 1); }
+        f.fillStyle = '#1e2a5e'; f.fillRect(wx, 43, 32, 70); for (let r = 0; r < 16; r++){ const hw = Math.round(Math.sqrt(256 - (16 - r)**2)); f.fillRect(wx + 16 - hw, 27 + r, hw*2, 1); }
+        f.fillStyle = '#ffffff'; for (let i = 0; i < 6; i++) f.fillRect(wx + 2 + Math.floor(R()*28), 32 + Math.floor(R()*70), 1, 1);
+        f.fillStyle = '#fff6c8'; f.fillRect(wx + 18, 50, 8, 8); f.fillStyle = '#1e2a5e'; f.fillRect(wx + 21, 49, 6, 6); f.fillStyle = '#14102a'; f.fillRect(wx + 15, 27, 2, 86); f.fillRect(wx, 74, 32, 2); }
+      for (const [bx, col] of [[150, '#c0283a'], [250, '#3a6ee8'], [420, '#c0283a']]){ f.fillStyle = '#c08a10'; f.fillRect(bx - 2, 22, 28, 3); f.fillStyle = col; f.fillRect(bx, 25, 24, 60);
+        for (let r = 0; r < 8; r++){ f.fillRect(bx, 85 + r, 12 - Math.round(r*1.5), 1); f.fillRect(bx + 12 + Math.round(r*1.5), 85 + r, 12 - Math.round(r*1.5), 1); }
+        f.fillStyle = '#ffd23f'; f.fillRect(bx + 2, 25, 1, 60); f.fillRect(bx + 21, 25, 1, 60); f.fillRect(bx + 8, 40, 8, 10); f.fillStyle = col; f.fillRect(bx + 10, 42, 4, 6); }   // banners with a crest
+      for (const sx of [204, 470]){ for (let i = 0; i < 30; i++){ f.fillStyle = '#d0d4e4'; f.fillRect(sx - 15 + i, 85 + i, 2, 2); f.fillRect(sx + 15 - i, 85 + i, 2, 2); } f.fillStyle = '#c08a10'; f.fillRect(sx - 15, 112, 5, 4); f.fillRect(sx + 11, 112, 5, 4);   // crossed swords
+        f.fillStyle = '#14102a'; f.fillRect(sx - 9, 90, 19, 16); for (let r = 0; r < 7; r++) f.fillRect(sx - 9 + r, 106 + r, 19 - r*2, 1); f.fillStyle = '#3a6ee8'; f.fillRect(sx - 8, 91, 17, 14); for (let r = 0; r < 6; r++) f.fillRect(sx - 8 + r, 105 + r, 17 - r*2, 1);
+        f.fillStyle = '#ffd23f'; f.fillRect(sx, 93, 1, 16); f.fillRect(sx - 6, 98, 13, 1); }   // ... behind a shield
+      break; }
     case 'sea': {   /* far: island silhouettes and a far-away ship on the horizon */
       const hz = 150, c = '#3a1f4e';
       for (const [ix, iw, ih] of [[20, 70, 12], [150, 40, 7], [260, 90, 16], [420, 50, 9]]){ for (let i = 0; i < iw; i++){ const hgt = Math.round(Math.sin(i/iw*Math.PI)*ih); f.fillStyle = c; f.fillRect(ix + i, hz - hgt, 1, hgt); } }
@@ -236,6 +272,25 @@ function backgrounds(th){
     case 'puffs':   /* near: soft clouds drifting past */
       for (let i = 0; i < 7; i++){ const cx = i*74 + Math.floor(R()*30), cy = 30 + Math.floor(R()*120), cw = 26 + Math.floor(R()*30);
         n.fillStyle = 'rgba(255,255,255,.85)'; n.fillRect(cx, cy, cw, 8); n.fillRect(cx + 5, cy - 5, cw - 14, 6); n.fillRect(cx + cw/2 - 2, cy - 9, 12, 6); n.fillStyle = 'rgba(200,225,250,.85)'; n.fillRect(cx + 2, cy + 7, cw - 4, 2); }
+      break;
+    case 'moatwall':   /* near: the castle's mossy outer wall rising out of the moat, arched water gates, iron rings, dripping moss */
+      for (let x = 0; x < 512; x++){ const top = H - 70 + Math.round(Math.sin(x/90*Math.PI*2/5.69)*3); n.fillStyle = '#2a2644'; n.fillRect(x, top, 1, H - top); }
+      n.fillStyle = '#34304e'; for (let y = H - 64; y < H; y += 10) for (let x = ((y/10|0) % 2)*12; x < 512; x += 24) n.fillRect(x, y, 22, 1);
+      for (const ax of [40, 170, 300, 430]){ n.fillStyle = '#100c22'; for (let r = 0; r < 30; r++){ const hw = Math.round(Math.sqrt(900 - (30 - r)**2)*.8); n.fillRect(ax - hw, H - 56 + r, hw*2, 1); } n.fillRect(ax - 24, H - 26, 48, 26);
+        n.fillStyle = '#5a5e76'; for (let r = 0; r < 30; r++){ const hw = Math.round(Math.sqrt(900 - (30 - r)**2)*.8); n.fillRect(ax - hw - 2, H - 56 + r, 2, 1); n.fillRect(ax + hw, H - 56 + r, 2, 1); } }
+      n.fillStyle = '#2f5a3a'; for (let i = 0; i < 26; i++){ const mx = Math.floor(R()*512), ml = 4 + Math.floor(R()*14); n.fillRect(mx, H - 70, 2, ml); n.fillRect(mx + 2, H - 70, 1, Math.max(1, ml - 3)); }
+      n.fillStyle = '#9aa0b4'; for (const rx of [105, 236, 365, 496]){ n.fillRect(rx - 3, H - 50, 7, 1); n.fillRect(rx - 3, H - 44, 7, 1); n.fillRect(rx - 3, H - 50, 1, 6); n.fillRect(rx + 3, H - 50, 1, 6); }
+      break;
+    case 'armoryracks':   /* near: weapon racks with spears and halberds, capes on hooks, a row of boots */
+      for (const rx of [20, 276]){ n.fillStyle = '#5a3416'; n.fillRect(rx, H - 82, 70, 4); n.fillRect(rx, H - 52, 70, 4); n.fillRect(rx + 2, H - 82, 3, 50); n.fillRect(rx + 65, H - 82, 3, 50);
+        for (let i = 0; i < 6; i++){ const sx = rx + 10 + i*10; n.fillStyle = '#7a4a22'; n.fillRect(sx, H - 100, 2, 50); n.fillStyle = '#d0d4e4'; if (i % 2){ n.fillRect(sx - 1, H - 108, 4, 8); n.fillRect(sx, H - 112, 2, 4); } else { n.fillRect(sx - 2, H - 104, 6, 2); n.fillRect(sx, H - 112, 2, 8); } } }
+      for (const cx of [140, 200, 400, 460]){ const col = cx % 120 < 60 ? ['#5a1a6a', '#3e1050'] : ['#8a1a2a', '#600c1c'];   // capes on hooks: round shoulders, a gold clasp, folds and a wavy hem
+        n.fillStyle = '#9aa0b4'; n.fillRect(cx + 6, H - 114, 3, 4);
+        for (let r = 0; r < 52; r++){ const hw = r < 5 ? 4 + r : 9 + Math.round((r - 5)*.12), hem = r > 47 ? (Math.floor((cx + r) / 3) % 2) : 0; n.fillStyle = col[0]; n.fillRect(cx + 7 - hw, H - 110 + r, hw*2, 1);
+          n.fillStyle = col[1]; n.fillRect(cx + 7 - Math.round(hw*.45), H - 110 + r, 1, 1); n.fillRect(cx + 7 + Math.round(hw*.45), H - 110 + r, 1, 1); if (hem){ n.clearRect(cx + 7 - hw, H - 110 + r, 3, 1); n.clearRect(cx + 7 + hw - 3, H - 110 + r, 3, 1); } }
+        n.fillStyle = '#ffd23f'; n.fillRect(cx + 1, H - 109, 13, 1); n.fillRect(cx + 6, H - 108, 3, 3); }
+      for (let i = 0; i < 10; i++){ const bx = 104 + i*40 + (i % 2)*6; n.fillStyle = '#1a1030'; n.fillRect(bx - 1, H - 47, 8, 14); n.fillRect(bx - 1, H - 37, 13, 5);   // pairs of riding boots under the racks
+        n.fillStyle = '#6b4a30'; n.fillRect(bx, H - 46, 6, 13); n.fillRect(bx, H - 36, 11, 3); n.fillStyle = '#8a6a48'; n.fillRect(bx, H - 46, 6, 2); n.fillStyle = '#4a3020'; n.fillRect(bx + 4, H - 44, 1, 8); }
       break;
     case 'flowers':
       for (let i = 0; i < 10; i++){ const cx = i*52 + Math.floor(R()*20); n.fillStyle = '#3a9a35'; n.fillRect(cx, H - 36, 26, 14); n.fillRect(cx + 4, H - 42, 18, 8);
@@ -334,6 +389,23 @@ function tiles(th){
     t.rainbow = mk(x => { x.fillStyle = '#1a1030'; x.fillRect(0, 0, TS, 8); ['#e83a4a','#ff8c42','#ffd23f','#3ddc84','#4d9de0','#9b5de5'].forEach((c, i) => { x.fillStyle = c; x.fillRect(0, i + 1, TS, 1); });   // rainbow bridge
       x.fillStyle = '#ffffff'; x.fillRect(5, 1, 1, 1); x.fillRect(12, 3, 1, 1); });
   }
+  if (th.skin === 'moat'){ const k2 = '#14102a';   /* castle landings: mossy grey stone blocks, wooden plank walkways */
+    const stone = x => { x.fillStyle = '#4a4e66'; x.fillRect(0, 0, TS, TS); x.fillStyle = '#363a50'; x.fillRect(0, 7, TS, 1); x.fillRect(0, 15, TS, 1); x.fillRect(5, 0, 1, 7); x.fillRect(12, 8, 1, 7);
+      x.fillStyle = '#5c6078'; x.fillRect(0, 0, 5, 1); x.fillRect(6, 0, 10, 1); x.fillRect(0, 8, 12, 1); x.fillRect(13, 8, 3, 1); x.fillStyle = '#2f5a3a'; x.fillRect(2, 13, 2, 2); x.fillRect(9, 5, 2, 1); };
+    t.fill = mk(stone);
+    t.top = mk(x => { stone(x); x.fillStyle = k2; x.fillRect(0, 4, TS, 1); x.fillStyle = '#8a8ea8'; x.fillRect(0, 0, TS, 4); x.fillStyle = '#b0b4c8'; x.fillRect(0, 0, TS, 1);
+      x.fillStyle = '#4a7a3a'; x.fillRect(1, 3, 3, 2); x.fillRect(9, 3, 4, 2); x.fillRect(10, 5, 2, 2); x.fillStyle = '#7ab85a'; x.fillRect(2, 3, 1, 1); x.fillRect(10, 3, 1, 1); });   // mossy stone ledge
+    t.brick = mk(x => { x.fillStyle = k2; x.fillRect(0, 0, TS, TS); x.fillStyle = '#6a6e88'; x.fillRect(1, 1, 14, 14); x.fillStyle = '#8a8ea8'; x.fillRect(1, 1, 14, 2); x.fillRect(1, 1, 2, 14);
+      x.fillStyle = '#4a4e66'; x.fillRect(1, 13, 14, 2); x.fillRect(13, 1, 2, 14); x.fillStyle = '#2f5a3a'; x.fillRect(3, 12, 3, 1); });   // big castle block
+    t.semi = mk(x => { x.fillStyle = k2; x.fillRect(0, 0, TS, 6); x.fillStyle = '#7a5434'; x.fillRect(0, 1, TS, 4); x.fillStyle = '#a8784a'; x.fillRect(0, 1, TS, 1); x.fillStyle = '#4a3020'; x.fillRect(7, 1, 1, 4); }); }
+  if (th.skin === 'armory'){ const k2 = '#14102a';   /* the knight's closet: flagstones with a red carpet runner, iron-banded treasure chests, wooden racks */
+    const flag = x => { x.fillStyle = '#4a4458'; x.fillRect(0, 0, TS, TS); x.fillStyle = '#383246'; x.fillRect(0, 7, TS, 1); x.fillRect(0, 15, TS, 1); x.fillRect(9, 0, 1, 7); x.fillRect(3, 8, 1, 7); x.fillStyle = '#5a5468'; x.fillRect(0, 0, 9, 1); x.fillRect(4, 8, 12, 1); };
+    t.fill = mk(flag);
+    t.top = mk(x => { flag(x); x.fillStyle = k2; x.fillRect(0, 6, TS, 1); x.fillStyle = '#9a2a3a'; x.fillRect(0, 0, TS, 6); x.fillStyle = '#c03a4a'; x.fillRect(0, 0, TS, 1); x.fillStyle = '#ffd23f'; x.fillRect(0, 4, TS, 1); for (let i = 1; i < TS; i += 4) x.fillRect(i, 2, 2, 1); });   // red carpet, gold trim
+    t.brick = mk(x => { x.fillStyle = k2; x.fillRect(0, 0, TS, TS); x.fillStyle = '#8a5a2a'; x.fillRect(1, 1, 14, 14); x.fillStyle = '#a8743e'; x.fillRect(1, 1, 14, 5); x.fillStyle = '#6b3f1f'; x.fillRect(1, 6, 14, 1);   // treasure chest: lid, iron bands, gold lock
+      x.fillStyle = '#5a5e76'; x.fillRect(3, 1, 2, 14); x.fillRect(11, 1, 2, 14); x.fillStyle = '#9aa0b4'; x.fillRect(3, 1, 1, 14); x.fillRect(11, 1, 1, 14); x.fillStyle = '#ffd23f'; x.fillRect(7, 5, 2, 4); x.fillStyle = k2; x.fillRect(7, 7, 2, 1); });
+    t.semi = mk(x => { x.fillStyle = k2; x.fillRect(0, 0, TS, 6); x.fillStyle = '#7a4a22'; x.fillRect(0, 1, TS, 4); x.fillStyle = '#a8743e'; x.fillRect(0, 1, TS, 1); x.fillStyle = '#9aa0b4'; x.fillRect(2, 2, 1, 1); x.fillRect(13, 2, 1, 1);
+      x.fillStyle = k2; x.fillRect(1, 6, 2, 3); x.fillRect(13, 6, 2, 3); }); }   // wooden rack shelf
   if (th.ship){ const dk = '#2e1a0c', hull = x => { x.fillStyle = '#6b3f1f'; x.fillRect(0, 0, TS, TS);   /* pirate ship: plank hull, deck boards, portholes, cannon, barrels */
       for (let r = 0; r < 4; r++){ x.fillStyle = '#84502a'; x.fillRect(0, r*4, TS, 1); x.fillStyle = '#4e2c14'; x.fillRect(0, r*4 + 3, TS, 1); x.fillRect((r*7 + 3) % TS, r*4, 1, 3); x.fillStyle = '#c8a060'; x.fillRect((r*7 + 5) % TS, r*4 + 1, 1, 1); } };
     const circ = (x, cx, cy, r, c) => { x.fillStyle = c; for (let i = -r; i <= r; i++){ const hw = Math.round(Math.sqrt(r*r - i*i + r*.6)); x.fillRect(cx - hw, cy + i, hw*2, 1); } };
@@ -447,13 +519,16 @@ function genBoss(){
 
 // ---------- special stages (stage index 0-2 per world; ids, saves and unlocks are unchanged) ----------
 //   World 2-2 = inside the barn, World 2-3 = in the chicken coop, World 3-2 = Santa's toy workshop (with Froppy the piano-throwing frog),
-//   World 3-3 = Reindeer Harbor (snowy port, Comet the Antler-Tosser), World 4-2 = sky level, World 4-3 = pirate ship
-const SPECIAL = { chickens:{ 1:'barn', 2:'coop' }, santa:{ 1:'workshop', 2:'port' }, infinite:{ 1:'sky', 2:'ship' } };
+//   World 3-3 = Reindeer Harbor (snowy port, Comet the Antler-Tosser), World 4-2 = sky level, World 4-3 = pirate ship,
+//   World 5-2 = The Moonlit Moat (raft ride, Splashbones + raft raiders), World 5-3 = The Knight's Closet (armory, Sir Clanks-a-Lot)
+const SPECIAL = { chickens:{ 1:'barn', 2:'coop' }, santa:{ 1:'workshop', 2:'port' }, infinite:{ 1:'sky', 2:'ship' }, ghosts:{ 1:'moat', 2:'armory' } };
 const SPECIAL_THEME = {
   barn:    { sky:['#1e0e06','#2a1408','#341a0c','#3e2010'], far:'barnwall', near:'barnposts', top:'#b07a40', top2:'#8a5a2a', fill:'#6b3f1f', fill2:'#4e2c14', block:'#e0a040', pillar:'hay', fx:'hay', skin:'barn', indoor:{ dark:'rgba(40,16,2,.24)', glow:'#ffb040' } },
   coop:    { sky:['#2a1a0c','#38220e','#462c12','#523616'], far:'coopwall', near:'coopwire', top:'#d8b050', top2:'#a07828', fill:'#6a4424', fill2:'#563418', block:'#e0a040', pillar:'hay', fx:'feathers', skin:'coop', indoor:{ dark:'rgba(48,20,0,.16)', glow:'#ff9a40' } },
   workshop:{ sky:['#3a1010','#4a1616','#5a1c1c','#6a2222'], far:'workshopwall', near:'lights', top:'#a8743e', top2:'#7a4a22', fill:'#8a3a2a', fill2:'#6a2a1e', block:'#3ddc84', pillar:'chimney', fx:'none', skin:'workshop', indoor:{ dark:'rgba(30,8,8,.14)', glow:'#ffd890' } },
   port:    { sky:['#141a40','#1e2a5a','#2c3e74','#40598f'], far:'harborfar', near:'harbornear', top:'#f2f6ff', top2:'#b8c8e8', fill:'#5a3a22', fill2:'#3e2614', block:'#e0a040', pillar:'ice', fx:'snow', skin:'port' },
+  moat:    { sky:['#080a24','#10163c','#1a2452','#26346a'], far:'moatcastle', near:'moatwall', top:'#8a8ea8', top2:'#4a7a3a', fill:'#4a4e66', fill2:'#363a50', block:'#9b5de5', pillar:'tower', fx:'fireflies', skin:'moat', stars:true },
+  armory:  { sky:['#1a1420','#221a2a','#2a2034','#32283e'], far:'armorywall', near:'armoryracks', top:'#9a2a3a', top2:'#5a1a28', fill:'#4a4458', fill2:'#383246', block:'#ffd23f', pillar:'tower', fx:'embers', skin:'armory', indoor:{ dark:'rgba(20,10,34,.2)', glow:'#ffa040' } },
   sky:     { sky:['#3d7fe0','#5f9cf0','#8cc0f8','#c8e6ff'], far:'skyfar', near:'puffs', top:'#6ad04a', top2:'#2f8a2f', fill:'#b07840', fill2:'#8a5a2a', block:'#ffd23f', pillar:'stone', fx:'sparkle', skin:'sky' },
 };
 function specialTheme(kind, world){ const base = themeOf(world); return Object.assign({}, SPECIAL_THEME[kind], { key:base.key, id:'sp-' + kind, music:base.music }); }   // same key + music as the world
@@ -461,41 +536,44 @@ function specialTheme(kind, world){ const base = themeOf(world); return Object.a
 // holes in the floor with a rafter above, lofts with a ladder rung, rafters/shelves to climb (the golden tuba block sits up high), chicken roosts / toy shelves.
 // Same shape of output as genLevel, so checkpoints, the goal, coins, crates, mix-in enemies and the tuba all work the same.
 function genInterior(seed, idx, enemyType, world, kind){
-  const R = rng(hash(seed + '#' + idx + '#' + kind)), ws = kind === 'workshop', co = kind === 'coop', w = 232, map = new Uint8Array(w*ROWS), skin = new Uint8Array(w*ROWS), gTop = new Array(w).fill(ROWS);
-  const coins = [], enemies = [], frogs = [], deco = [], piles = [];
+  const R = rng(hash(seed + '#' + idx + '#' + kind)), ws = kind === 'workshop', co = kind === 'coop', ar = kind === 'armory', w = 232, map = new Uint8Array(w*ROWS), skin = new Uint8Array(w*ROWS), gTop = new Array(w).fill(ROWS);
+  const coins = [], enemies = [], frogs = [], knights = [], deco = [], piles = [];
   const set = (x, y, v, sk = 0) => { if (x >= 0 && x < w && y >= 0 && y < ROWS){ map[y*w + x] = v; skin[y*w + x] = sk; } };
   const col = (x, top) => { if (x >= w) return; gTop[x] = top; for (let y = top; y < ROWS; y++) map[y*w + x] = 1; };
   const coin = (tx, ty) => coins.push({ x:tx*TS + 3, y:ty*TS + 1 });
-  const foe = (tx, row, type = enemyType, list = enemies) => { const K = ENEMY_KIND[type] || {}, fly = !!ENEMY_FLY[type]; list.push({ type, x:tx*TS, y:fly ? (row - 3)*TS : row*TS - (K.h || 14), fly }); };
+  const foe = (tx, row, type = enemyType, list = enemies) => { const K = ENEMY_KIND[type] || {}, fly = !!ENEMY_FLY[type]; list.push({ type, x:tx*TS, y:fly ? (row - (ar ? 4 : 3))*TS : row*TS - (K.h || 14), fly }); };   // Knight's Closet ghosts float a bit higher (over a walking hero's head)
   const frog = (tx, row) => { if (!ws || frogs.length >= 3 || tx < 30 || frogs.some(f => Math.abs(f.x/TS - tx) < 24)) return false; foe(tx, row, 'frog', frogs); return true; };
+  // the Knight's Closet: up to 5 Sir Clanks-a-Lots on the floor, well spread out (never two near each other)
+  const knight = tx => { if (!ar || knights.length >= 5 || tx < 22 || tx > w - 30 || knights.some(f => Math.abs(f.x/TS - tx) < 20)) return false; foe(tx, 12, 'armor', knights); return true; };
   const pile = c => { for (const [dx, dy] of [[0,1],[1,1],[1,2],[2,1]]) set(c + dx, 12 - dy, 7); piles.push(c); };
   let x = 0; for (; x < 16; x++) col(x, 12); coin(8, 9); coin(9, 9); coin(10, 9); deco.push({ k:'lantern', x:7, len:30 });
   let tuba = null, last = '', n0 = 0; const end = w - 26;
   while (x < end){
     const r = R(); let seg = r < .2 ? 'flat' : r < .36 ? 'bales' : r < .52 ? 'chute' : r < .68 ? 'loft' : r < .84 ? 'rafters' : 'roost';
     if (seg === last) seg = 'flat'; last = seg; n0++; const sx = x;
-    if (seg === 'flat'){ const n = 10 + Math.floor(R()*3); for (let i = 0; i < n; i++) col(x++, 12); deco.push({ k:ws ? 'bench' : co ? 'nests' : 'stall', x0:sx + 1, x1:sx + n - 2 });
+    if (seg === 'flat'){ const n = 10 + Math.floor(R()*3); for (let i = 0; i < n; i++) col(x++, 12); deco.push({ k:ws ? 'bench' : co ? 'nests' : ar ? 'armor' : 'stall', x0:sx + 1, x1:sx + n - 2 });
       if (co) deco.push({ k:'hen', x0:sx + 1, x1:sx + n - 2, ph:R()*6.28, sp:.25 + R()*.2 });   // a harmless hen pecking around (scenery, no collision)
       if (piles.length < 2 && R() < .55 && sx > 20){ pile(sx + 2); foe(sx + n - 2, 12); }
-      else { for (let i = 0; i < 4; i++) coin(sx + 3 + i, 9); if (!frog(sx + n - 3, 12)) foe(sx + n - 3, 12); } }
+      else { for (let i = 0; i < 4; i++) coin(sx + 3 + i, 9); if (!frog(sx + n - 3, 12) && !knight(sx + n - 3)) foe(sx + n - 3, 12); } }
     else if (seg === 'bales'){ const n = 9; for (let i = 0; i < n; i++) col(x++, 12);
       for (const [dx, hgt] of [[2,1],[3,2],[4,2],[5,1]]) for (let y = 0; y < hgt; y++) set(sx + dx, 11 - y, 2);
-      coin(sx + 3, 8); coin(sx + 4, 8); coin(sx + 2, 9); coin(sx + 5, 9); if (R() < .5) foe(sx + 7, 12); }
+      coin(sx + 3, 8); coin(sx + 4, 8); coin(sx + 2, 9); coin(sx + 5, 9); if (R() < .5 && !knight(sx + 7)) foe(sx + 7, 12); }
     else if (seg === 'chute'){ for (let i = 0; i < 3; i++) col(x++, 12); const gw = 2 + (R() < .5 ? 1 : 0), gx = x; x += gw;
       for (let i = -1; i <= gw; i++){ set(gx + i, 9, 5); coin(gx + i, 8); }
-      deco.push({ k:co ? 'feeder' : 'chute', x:gx + gw/2, y1:5*TS });
+      deco.push({ k:co ? 'feeder' : ar ? 'capes' : 'chute', x:gx + gw/2, y1:5*TS });
       for (let i = 0; i < 4; i++) col(x++, 12); }
     else if (seg === 'loft'){ for (let i = 0; i < 3; i++) col(x++, 12); const n = 8 + Math.floor(R()*3), lx = x;
       set(lx - 1, 10, 5, 3); deco.push({ k:'ladder', x:lx - 1, y0:9, y1:12 });
-      for (let i = 0; i < n; i++){ col(x, 9); if (co) for (let y = 10; y < 12; y++) set(x, y, 2); x++; } for (let i = 1; i < n - 1; i++) coin(lx + i, 7); deco.push({ k:'loft', x0:lx, x1:lx + n - 1, y:9 });   // coop: the loft is a bank of nesting boxes
+      for (let i = 0; i < n; i++){ col(x, 9); if (co || ar) for (let y = 10; y < 12; y++) set(x, y, 2); x++; } for (let i = 1; i < n - 1; i++) coin(lx + i, 7); deco.push({ k:'loft', x0:lx, x1:lx + n - 1, y:9 });   // coop: the loft is a bank of nesting boxes
       if (!frog(lx + n - 3, 9)) foe(lx + n - 2, 9);
       for (let i = 0; i < 2; i++) col(x++, 12); }
     else if (seg === 'rafters'){ const n = 13; for (let i = 0; i < n; i++) col(x++, 12);
       for (let i = 2; i <= 4; i++) set(sx + i, 9, 5); for (let i = 6; i <= 9; i++){ set(sx + i, 6, 5); coin(sx + i, 5); }
       if (!tuba && sx > w*.22 && sx < w*.75){ tuba = { x:sx + 8, y:2 }; set(sx + 8, 2, 8); } else coin(sx + 3, 8);
-      foe(sx + n - 2, 12); }
+      if (ar) deco.push({ k:'shields', x0:sx + 2, x1:sx + 9, at:[[sx + 3, 9], [sx + 7, 6], [sx + 9, 6]] });   // shields hang under the rack shelves
+      if (!knight(sx + n - 2)) foe(sx + n - 2, 12); }
     else { const n = 11; for (let i = 0; i < n; i++) col(x++, 12);
-      for (let i = 3; i <= 7; i++) set(sx + i, 8, 5); deco.push({ k:ws ? 'shelf' : 'roost', x0:sx + 3, x1:sx + 7, y:8 });
+      for (let i = 3; i <= 7; i++) set(sx + i, 8, 5); deco.push({ k:ws ? 'shelf' : ar ? 'helms' : 'roost', x0:sx + 3, x1:sx + 7, y:8 });
       foe(sx + 5, 8); for (let i = 3; i <= 7; i++) coin(sx + i, 10); if (co) deco.push({ k:'hen', x0:sx + 1, x1:sx + n - 2, ph:R()*6.28, sp:.3 }); }
     if (n0 % 2 === 0) deco.push({ k:'lantern', x:sx + 3, len:22 + Math.floor(R()*30) });
   }
@@ -508,8 +586,9 @@ function genInterior(seed, idx, enemyType, world, kind){
   for (let c = 24; piles.length < 1 && c < st - 10; c++) if (flatAt(c) && !(tuba && Math.abs(tuba.x - c) < 5)) pile(c);
   // fairness (same rule as the normal stages): no ground enemy right next to a hole in the floor
   const nearGap = ex => { for (let k = ex - 4; k <= ex + 4; k++) if (k >= 0 && k < w && gTop[k] >= ROWS) return true; return false; };
-  for (const list of [enemies, frogs]) for (let i = list.length - 1; i >= 0; i--){ const c = Math.floor(list[i].x/TS); if (nearGap(c) || piles.some(p => c >= p - 1 && c <= p + 3) || Math.abs(c - cp) < 3) list.splice(i, 1); }
-  mixEnemies(seed, idx, world, w, map, gTop, enemies, cp); enemies.push(...frogs);
+  for (const list of [enemies, frogs, knights]) for (let i = list.length - 1; i >= 0; i--){ const c = Math.floor(list[i].x/TS); if (nearGap(c) || piles.some(p => c >= p - 1 && c <= p + 3) || Math.abs(c - cp) < 3) list.splice(i, 1); }
+  mixEnemies(seed, idx, world, w, map, gTop, enemies, cp); if (ar) for (const e of enemies) if (e.type === 'dragon') e.y -= TS;   // Knight's Closet: Burney flies up near the banners too
+  enemies.push(...frogs, ...knights);
   return { w, map, skin, coins, enemies, gTop, cpX:cp*TS, goalX:(w - 10)*TS, startX:2*TS, tuba:tuba ? { x:tuba.x, y:tuba.y, piles } : { piles }, deco, indoor:kind };
 }
 // World 3-3 Reindeer Harbor (hand-built): snowy docks on stilts over icy water (falling in = a pit), two moored ships you board by
@@ -580,6 +659,43 @@ function genSky(foe = 'wisp'){
   return { w, map, skin, coins, enemies, gTop, cpX:96*TS, goalX:(w - 10)*TS, startX:2*TS, tuba:{ x:129, y:3, piles:[pile] }, deco, movers, vanish, sky:true };
 }
 
+// World 5-2 The Moonlit Moat (hand-built raft ride): four mossy stone landings with three log rafts between them. Each raft drifts with the
+// scrolling screen (the hero stands on it; it never leaves him behind) and stops at the next landing; the screen waits at each landing
+// until the hero steps onto the next raft. Splashbones skeletons ripple, leap onto the raft and dive back; raiders in tub boats float
+// alongside and blow slow bubbles; the world's ghosts drift overhead (high enough that a hero standing on the raft is never touched).
+function genMoat(foe = 'ghost'){
+  const w = 200, map = new Uint8Array(w*ROWS), skin = new Uint8Array(w*ROWS), gTop = new Array(w).fill(ROWS), coins = [], enemies = [], movers = [], deco = [], piles = [];
+  const set = (x, y, v) => { if (x >= 0 && x < w && y >= 0 && y < ROWS) map[y*w + x] = v; };
+  const coin = (tx, ty) => coins.push({ x:tx*TS + 3, y:ty*TS + 1 });
+  const land = (x0, x1, k) => { for (let x = x0; x <= x1; x++){ gTop[x] = 12; for (let y = 12; y < ROWS; y++) set(x, y, 1); } deco.push({ k:'landing', x0, x1, kind:k }); };
+  const enemy = (type, tx, row = 12, o = {}) => { const K = ENEMY_KIND[type] || { h:14 }, fly = !!ENEMY_FLY[type]; enemies.push(Object.assign({ type, x:tx*TS, y:fly ? (row - 3)*TS : row*TS - (K.h || 14), fly }, o)); };
+  const ghost = (tx, y) => enemies.push({ type:foe, x:tx*TS, y, fly:true });
+  const raft = (a, b) => { const x0 = a*TS, x1 = b*TS - MOAT.raftW; movers.push({ kind:'drift', drift:true, x:x0, y:MOAT.deck, w:MOAT.raftW, h:6, x0, x1, off:MOAT.off, amp:1.5, sp:1.6, ph:a }); return movers.length - 1; };
+  const tub = (cam0) => { movers.push({ kind:'eraft', eraft:true, x:cam0 + MOAT.eoff, y:MOAT.deck + 1, w:MOAT.ew, h:6, a:cam0 + MOAT.eoff, b:cam0 + MOAT.eoff + 240, amp:1.5, sp:2.1, ph:cam0 }); return movers.length - 1; };
+  const rider = (type, cam0) => { const ri = tub(cam0), K = ENEMY_KIND[type]; enemies.push({ type, x:cam0 + MOAT.eoff + (MOAT.ew - K.w)/2, y:MOAT.deck + 1 - K.h, ri, rider:true }); };
+  const skel = (tx) => enemy('skeleton', tx, 12, { home:tx*TS });
+  // start landing with the castle's water gate
+  land(0, 5, 'gate'); coin(2, 9); coin(3, 9); coin(4, 9);
+  raft(6, 52);
+  for (const c of [14, 15, 16, 30, 31, 32, 44, 45]) coin(c, 9);
+  ghost(19, 132); skel(22); rider('meep', 120); skel(38); ghost(48, 134);
+  // landing B: a little stone tower with ? blocks
+  land(52, 57, 'tower'); set(55, 8, 3); set(56, 8, 2); set(57, 8, 3); coin(55, 7); coin(56, 7); coin(57, 7);
+  raft(58, 104);
+  for (const c of [64, 65, 66, 82, 83, 84, 96, 97]) coin(c, 9);
+  skel(70); rider('dino', 1180); ghost(80, 136); skel(92); ghost(96, 130);
+  // checkpoint landing with the golden tuba block
+  land(104, 111, 'cp'); set(109, 8, 8); const tubaSpot = { x:109, y:8 };
+  raft(112, 160);
+  for (const c of [118, 119, 120, 136, 137, 138, 150, 151]) coin(c, 9);
+  rider('dragon', 1760); skel(124); ghost(120, 134); skel(142); rider('hedgehog', 2190); ghost(150, 130);
+  // the castle door landing: crates, a stair of castle blocks, the goal metronome
+  land(160, w - 1, 'end'); const pile1 = 165; for (const [dx, dy] of [[0,1],[1,1],[1,2],[2,1]]) set(pile1 + dx, 12 - dy, 7); piles.push(pile1); coin(166, 8);
+  enemy('dino', 172);
+  const st = w - 22; for (let s2 = 0; s2 < 4; s2++){ for (let yy = 0; yy <= s2; yy++) set(st + s2, 11 - yy, 2); coin(st + s2, 11 - s2 - 2); }
+  return { w, map, skin, coins, enemies, gTop, cpX:106*TS, goalX:(w - 10)*TS, startX:2*TS, tuba:{ x:tubaSpot.x, y:tubaSpot.y, piles }, deco, movers,
+           moat:true, auto:{ speed:MOAT.speed, lead:MOAT.lead, hold:true } };
+}
 const specialOf = (seed, level) => (SPECIAL[seed] || {})[level] || null;
 // speed = auto-scroll px/s (the hero runs 108 px/s, so there is lots of slack); cannonballs and barrels are slow and always telegraphed
 const SHIP = { speed:32, wait:1.8, ballSpeed:58, ballCool:3.6, warn:.8, barrelSpeed:40, barrelEvery:3.8, water:205 };
@@ -740,6 +856,11 @@ const SFX = {
   // Froppy's piano landing: a comical clunky diminished piano chord + wood crunch + a little "boing"
   plunk:()=>{ [52, 55, 58, 61].forEach((m, i) => { blip('triangle', mtof(m), mtof(m)*.985, .5, .15, i*.014); blip('square', mtof(m + 12), mtof(m + 12)*.99, .06, .05, i*.014); }); noise(.14, .22, 0, 700); blip('sine', 330, 90, .3, .14, .07); },
   poof:()=>{ noise(.18, .14, 0, 2500); blip('sine', 900, 1400, .12, .1); },
+  bubble:()=>{ blip('sine', 300, 900, .12, .14); blip('sine', 500, 1300, .08, .1, .1); },   // bloop-bloop (a raider's bubble / skeleton ripples)
+  pop:()=>{ blip('sine', 1400, 2400, .05, .16); noise(.03, .08, 0, 4000); },
+  rattle:()=>{ for (let i = 0; i < 4; i++) blip('square', 900 + i*120, 700, .03, .08, i*.05); noise(.15, .08, 0, 3000); },   // clickety bones
+  clank:()=>{ blip('square', 620, 600, .06, .12); blip('triangle', 1240, 1180, .18, .1); noise(.06, .14, 0, 3500); },   // metal CLANK
+  step:()=>{ blip('triangle', 820, 780, .04, .06); noise(.03, .05, 0, 4000); },   // soft armor footstep
   empty:()=>blip('square', 120, 100, .06, .12), pause:()=>blip('triangle', 880, 880, .08, .2), heart:()=>[76,79,84].forEach((m,i)=>blip('triangle', mtof(m), mtof(m), .1, .25, i*.07)),
 };
 function sfx(n, inst){ if (!sfxOn || !ac()) return; if (n === 'shoot') (SHOOT[inst] || SHOOT.sax)(); else SFX[n] && SFX[n](); }
@@ -928,7 +1049,7 @@ function newRun(opts){
         tuba:clamp(opts.tuba | 0, 0, TUBA.ammo), tubaCool:0, tubaKO:0, bigShake:0 };
   G.special = special;
   const wn = Math.max(1, opts.worldNo | 0 || 1);
-  G.base = boss ? genBoss() : special === 'ship' ? genShip(G.enemyType) : special === 'sky' ? genSky(G.enemyType) : special === 'port' ? genPort(G.enemyType) : special ? genInterior(opts.seed, opts.level, G.enemyType, wn, special) : genLevel(opts.seed, opts.level, G.enemyType, wn);
+  G.base = boss ? genBoss() : special === 'ship' ? genShip(G.enemyType) : special === 'sky' ? genSky(G.enemyType) : special === 'port' ? genPort(G.enemyType) : special === 'moat' ? genMoat(G.enemyType) : special ? genInterior(opts.seed, opts.level, G.enemyType, wn, special) : genLevel(opts.seed, opts.level, G.enemyType, wn);
   resetLevel(true);
 }
 function resetLevel(first){
@@ -937,7 +1058,7 @@ function resetLevel(first){
   G.vanish = (b.vanish || []).map(v => ({ ...v, st:'idle', t:0 }));
   G.coinList = b.coins.map(c => ({ ...c, taken:false }));
   G.enemies = b.enemies.map(e => { const K = ENEMY_KIND[e.type] || {};
-    return { ...e, w:K.w || 14, h:K.h || 14, vx:-(K.speed || 28), vy:0, baseY:e.y, t:Math.random()*6, alive:true, dead:0, face:-1, hp:K.hp || 1, st:'idle', cool:(K.thrower ? PIANO.first : K.antler ? ANTLER.first : ARCHER.first) + Math.random(), dir:-1, hopT:.4 + Math.random()*.5 }; });
+    return { ...e, w:K.w || 14, h:K.h || 14, vx:-(K.speed || 28), vy:0, baseY:e.y, t:Math.random()*6, alive:true, dead:0, face:-1, hp:K.hp || 1, st:'idle', cool:(e.ri != null ? BUBBLE.first : K.armor ? ARMOR.first : K.skeleton ? SKEL.first : K.thrower ? PIANO.first : K.antler ? ANTLER.first : ARCHER.first) + Math.random(), dir:-1, hopT:.4 + Math.random()*.5 }; });
   G.shots = []; G.eshots = []; G.marks = []; G.parts = []; G.bumps = []; G.pops = []; G.pickups = []; G.bombs = []; G.blasts = []; G.floats = [];
   const sx = G.cpReached ? b.cpX : b.startX;
   G.p = { x:sx, y:(gTopAt(sx) - 2)*TS - 4, w:10, h:20, vx:0, vy:0, face:1, onGround:false, coyote:0, buffer:0, hearts:G.maxHearts, inv:first ? 0 : 1.5, cool:0, dead:0, anim:0, clear:0 };
@@ -991,7 +1112,7 @@ function step(dt){
   if (p.bonk) bonk(p.bonk.tx, p.bonk.ty);
   if (G.vanish.length) updateVanish(dt);
   if (G.base.indoor === 'coop') henClucks();
-  if (G.base.auto){ autoScroll(dt); if (!p.splash && p.y + p.h > SHIP.water + 4){ p.splash = 1; splash(p.x + p.w/2); } }
+  if (G.base.auto){ autoScroll(dt); if (!p.splash && p.y + p.h > waterY() + 4){ p.splash = 1; splash(p.x + p.w/2); } }
   p.anim += Math.abs(p.vx)*dt; p.inv = Math.max(0, p.inv - dt); p.cool -= dt;
   if (input.shootPressed && p.cool <= 0 && G.shots.length < (G.chord ? 9 : 3)) shoot();
   G.tubaCool = Math.max(0, G.tubaCool - dt);
@@ -1012,7 +1133,10 @@ function step(dt){
     if (!e.alive){ e.dead -= dt; e.vy += 900*dt; e.y += e.vy*dt; continue; }
     if (Math.abs(e.x - p.x) > 300) continue;
     e.t += dt; e.flash = Math.max(0, (e.flash || 0) - dt); const K = ENEMY_KIND[e.type] || {};
-    if (K.archer) updateArcher(e, dt, p);
+    if (e.ri != null) updateRider(e, dt, p);
+    else if (K.skeleton) updateSkeleton(e, dt, p);
+    else if (K.armor) updateArmor(e, dt, p);
+    else if (K.archer) updateArcher(e, dt, p);
     else if (K.thrower) updateFrog(e, dt, p);
     else if (K.antler) updateReindeer(e, dt, p);
     else if (K.hop) updateHopper(e, dt, K);
@@ -1022,7 +1146,8 @@ function step(dt){
       if (Math.abs(e.x - (e.homeX ??= e.x)) > 48) e.vx = -Math.sign(e.x - e.homeX)*Math.abs(e.vx);
       if (e.onGround){ const fx = Math.floor((e.vx > 0 ? e.x + e.w + 1 : e.x - 1)/TS), fy = Math.floor((e.y + e.h + 2)/TS); if (!solid(fx, fy) && tileAt(fx, fy) !== 5) e.vx = -e.vx; }
       if (e.y > H + 40) e.alive = false; }
-    if (!K.archer && !K.hop && !K.thrower && !K.antler) e.face = e.vx > 0 ? 1 : -1;
+    if (!K.archer && !K.hop && !K.thrower && !K.antler && !K.skeleton && !K.armor && e.ri == null) e.face = e.vx > 0 ? 1 : -1;
+    if (e.sub || !e.alive) continue;   // a Splashbones hiding under the water can't be hit and can't hurt
     for (const s of G.shots) if (!s.dead && e.alive && overlap({ x:s.x, y:s.y, w:6, h:6 }, e)){ s.dead = 1; hitEnemy(e); }
     if (e.alive && !p.dead && overlap(p, e)){
       if (p.vy > 30 && p.y + p.h - e.y < 15){ kill(e, true); p.vy = input.jump ? -380 : -260; }
@@ -1036,6 +1161,7 @@ function step(dt){
     if (s.kind === 'note' || s.kind === 'whole') spellShot(s, p);
     if (s.kind === 'piano') pianoShot(s, p);
     if (s.kind === 'antler') antlerShot(s, p);
+    if (s.kind === 'bubble'){ bubbleShot(s, p); continue; }
     if (s.kind === 'rock' && s.y > 12*TS - 8){ s.dead = 1; puff(s.x, s.y, '#9aa0b4', 6); G.shake = .1; }
     if (s.kind === 'arrow'){ if (s.t > ARCHER.life || solid(Math.floor((s.x + Math.sign(s.vx)*6)/TS), Math.floor(s.y/TS))){ s.dead = 1; puff(s.x, s.y, '#e0a868', 4, 30); }
       for (const n of G.shots) if (!s.dead && !n.dead && overlap({ x:n.x, y:n.y, w:6, h:6 }, { x:s.x - 7, y:s.y - 3, w:14, h:7 })){ n.dead = 1; s.dead = 1; sfx('bump'); puff(s.x, s.y, '#ffffff', 5, 40); } }
@@ -1054,21 +1180,28 @@ function step(dt){
 // ---------- pirate ship: auto-scroll, moving rafts, cannons, rolling barrels ----------
 function shipPre(dt){ const p = G.p;   /* move the rafts first and carry a hero who is standing on one */
   for (const m of G.movers){ m.t += dt; const ox = m.x, oy = m.y;
-    if (m.kind === 'swing') m.x = m.bx + Math.sin(m.t*m.sp + m.ph)*m.amp; else m.y = m.by + Math.sin(m.t*m.sp + m.ph)*m.amp;
+    if (m.drift){ m.x = clamp(G.cam + m.off, m.x0, m.x1); m.y = m.by + Math.sin(m.t*m.sp + m.ph)*m.amp; }   // moat log raft: rides with the screen, docks at the landings
+    else if (m.eraft){ const c = G.cam + MOAT.eoff; if (p.on === m) m.b = Math.max(m.b, c);   // a raider's tub floats alongside, then paddles off ahead (it waits while the hero stands in it)
+      m.x = c < m.a ? m.a : c <= m.b ? c : m.b + (c - m.b)*1.8; m.y = m.by + Math.sin(m.t*m.sp + m.ph)*m.amp; }
+    else if (m.kind === 'swing') m.x = m.bx + Math.sin(m.t*m.sp + m.ph)*m.amp; else m.y = m.by + Math.sin(m.t*m.sp + m.ph)*m.amp;
     m.dx = m.x - ox; m.dy = m.y - oy;
     if (p.on === m && !p.dead){ if (p.x + p.w > m.x - 1 && p.x < m.x + m.w + 1){ moveX(p, m.dx); p.y = m.y - p.h; } else p.on = null; } } }
 function landMovers(prevB){ const p = G.p; p.on = null; if (p.vy < 0 || p.dead) return;
-  for (const m of G.movers) if (p.x + p.w > m.x + 1 && p.x < m.x + m.w - 1 && prevB <= m.y + 4 && p.y + p.h >= m.y){ p.y = m.y - p.h; p.vy = 0; p.onGround = true; p.on = m; return; } }
+  for (const m of G.movers) if (p.x + p.w > m.x + 1 && p.x < m.x + m.w - 1 && prevB <= m.y + 4 && p.y + p.h >= m.y){ p.y = m.y - p.h; p.vy = 0; p.onGround = true; p.on = m; if (m.drift) m.boarded = true; return; } }
 const boxFree = (x, y, w, h) => { for (let tx = Math.floor(x/TS); tx <= Math.floor((x + w - .01)/TS); tx++) for (let ty = Math.floor(y/TS); ty <= Math.floor((y + h - .01)/TS); ty++) if (solid(tx, ty)) return false; return true; };
-function autoScroll(dt){ const p = G.p, max = Math.max(0, G.L.w*TS - W);
-  if (G.autoWait > 0) G.autoWait -= dt; else G.cam = Math.min(max, G.cam + G.base.auto.speed*dt);
-  const lead = p.x - G.cam - 160; if (lead > 0 && !p.dead) G.cam = Math.min(max, G.cam + Math.min(lead, 150*dt));   /* never pin a hero at the right edge: a hero who runs ahead scrolls the screen faster */
+function autoScroll(dt){ const p = G.p, A = G.base.auto, c0 = G.cam; let max = Math.max(0, G.L.w*TS - W);
+  // moat: the screen waits at a landing until the hero has stepped past the start of the next raft
+  if (A.hold) for (const m of G.movers) if (m.drift && p.x + p.w/2 < m.x0 && m.x0 - m.off >= G.cam - 1) max = Math.min(max, m.x0 - m.off);
+  if (G.autoWait > 0) G.autoWait -= dt; else G.cam = Math.max(G.cam, Math.min(max, G.cam + A.speed*dt));
+  const lead = p.x - G.cam - (A.lead || 160); if (lead > 0 && !p.dead) G.cam = Math.max(G.cam, Math.min(max, G.cam + Math.min(lead, 150*dt)));
+  G.camV = dt > 0 ? (G.cam - c0)/dt : 0;   /* never pin a hero at the right edge: a hero who runs ahead scrolls the screen faster */
   const left = G.cam + 2, right = G.cam + W - p.w - 2;
   if (p.x < left){ moveX(p, left - p.x); if (p.vx < 0) p.vx = 0; if (p.x < left - .5) unsquish(p, left); }
   if (p.x > right){ p.x = right; if (p.vx > 0) p.vx = 0; } }
 // no squish traps: if the screen edge pushes the hero into a crate/step/cannon, pop the hero up onto it instead of hurting them
 function unsquish(p, left){ for (let up = 1; up <= 96; up++){ const y = p.y - up; if (boxFree(left, y, p.w, p.h)){ p.x = left; p.y = y; p.vy = Math.min(p.vy, -60); G.unsquish = (G.unsquish || 0) + 1; puff(p.x + p.w, p.y + p.h, '#ffffff', 5, 40); return; } } p.x = left; }
-function splash(x){ puff(x, SHIP.water, '#ffffff', 8, 80); puff(x, SHIP.water, '#7cc0ff', 6, 60); sfx('splash'); }
+const waterY = () => G.base.moat ? MOAT.water : SHIP.water;
+function splash(x){ const wy = waterY(); puff(x, wy, '#ffffff', 8, 80); puff(x, wy, '#7cc0ff', 6, 60); sfx('splash'); }
 function updateCannons(dt){ const p = G.p;
   for (const c of G.cannons){ const cx = c.tx*TS, cy = c.ty*TS + 6; c.cool -= dt; c.flash = Math.max(0, (c.flash || 0) - dt);
     if (c.warn > 0){ c.warn -= dt; if (Math.random() < .3) G.parts.push({ x:cx + 1, y:cy - 1, vx:-10 - Math.random()*20, vy:-20 - Math.random()*20, life:.5, color:'#d0d4e4', s:2 });
@@ -1096,6 +1229,63 @@ function shoot(){ const p = G.p, color = G.opts.golden ? '#ffe14a' : (SP.NOTE_CO
   const spreads = G.chord ? [-70, 0, 70] : [0]; for (const vy of spreads) G.shots.push({ x:ox, y:oy, vx:p.face*220, vy, t:0, color });
   p.cool = .22; sfx('shoot', G.opts.inst); }
 function addCoin(){ G.coins++; sfx('coin'); const tot = (G.opts.coinBase || 0) + G.coins; if (tot % 100 === 0){ G.lives = Math.min(99, G.lives + 1); G.opts.onLifeLost && G.opts.onLifeLost(G.lives); G.msg = { text:'1-UP!', t:1.4 }; sfx('power'); } }
+// ---------- World 5: The Moonlit Moat (Splashbones + raft raiders) and The Knight's Closet (Sir Clanks-a-Lot) ----------
+const waterAt = x => { const tx = Math.floor(x/TS); return tx >= 0 && tx < G.L.w && G.L.gTop[tx] >= ROWS; };
+const heroRaft = p => G.movers.find(r => r.drift && p.x + p.w > r.x && p.x < r.x + r.w && p.y + p.h <= r.y + 3) || null;
+function updateSkeleton(e, dt, p){   /* under the water → ripples + bubbles for 1 s → leaps out and lands on the far end of the raft → rattles toward the hero → dives back */
+  const S = SKEL; e.cool -= dt; e.stT = (e.stT || 0) - dt;
+  if (e.st === 'idle' || e.st === 'under'){ e.st = 'under'; e.sub = true; e.x = e.home; e.y = MOAT.water + 24; e.vx = 0; e.vy = 0;
+    const m = heroRaft(p), near = e.home > G.cam - 40 && e.home < G.cam + W + 40;
+    if (e.cool <= 0 && near && m && m.boarded && !p.dead && !p.clear && (e.leaps || 0) < S.leaps && !G.enemies.some(o => o !== e && o.alive && o.type === 'skeleton' && o.st !== 'under' && o.st !== 'idle')){
+      const hx = p.x + p.w/2, side = hx - m.x < m.w/2 ? -1 : 1, sx = side < 0 ? m.x + m.w + 6 : m.x - 24;   // come up at the end of the raft AWAY from the hero
+      if (sx > G.cam + 6 && sx < G.cam + W - 18 && waterAt(sx) && waterAt(sx + e.w)){ e.side = side; e.raft = m; e.st = 'ripple'; e.stT = S.ripple; e.x = sx; e.y = MOAT.water + 6; G.ripples = (G.ripples || 0) + 1; sfx('bubble'); } }
+    return; }
+  const r = e.raft;
+  if (e.st === 'ripple'){ e.x = e.side < 0 ? r.x + r.w + 6 : r.x - 24;   // the ripples ride along beside the raft
+    if (Math.random() < .3) G.parts.push({ x:e.x + e.w/2 + (Math.random() - .5)*10, y:MOAT.water - 1, vx:(Math.random() - .5)*10, vy:-26 - Math.random()*20, life:.35, color:'#c8f0ff', s:2 });
+    if (e.stT <= 0){ e.st = 'leap'; e.sub = false; e.y = MOAT.water - e.h + 4; e.vy = S.vy; e.vx = e.side*S.vx; e.face = e.side; e.leaps = (e.leaps || 0) + 1; G.leaps = (G.leaps || 0) + 1; splash(e.x + e.w/2); sfx('rattle'); }
+    return; }
+  if (e.st === 'leap' || e.st === 'dive'){ e.vy += S.grav*dt; e.x += (e.vx + (G.camV || 0)*(e.st === 'leap' ? 1 : 0))*dt; e.y += e.vy*dt;
+    if (e.st === 'leap' && e.vy > 0 && e.x + e.w > r.x + 2 && e.x < r.x + r.w - 2 && e.y + e.h >= r.y && e.y + e.h <= r.y + 12){ e.y = r.y - e.h; e.st = 'board'; e.stT = S.board; e.vx = 0; e.vy = 0; sfx('clank'); }
+    else if (e.y + e.h > MOAT.water + 8){ splash(e.x + e.w/2); e.st = 'under'; e.sub = true; e.cool = S.cool + Math.random()*.6; }
+    return; }
+  if (e.st === 'board'){ e.x += r.dx; e.y = r.y - e.h; const dir = Math.sign(p.x + p.w/2 - (e.x + e.w/2)) || -1; e.face = dir;
+    if (Math.abs(p.x + p.w/2 - (e.x + e.w/2)) > 6) e.x += dir*S.walk*dt; e.x = clamp(e.x, r.x, r.x + r.w - e.w);
+    if (G.t - (G.rattleT ?? -9) > .9){ G.rattleT = G.t; sfx('rattle'); }
+    if (e.stT <= 0 || heroRaft(p) !== r){ e.st = 'dive'; e.vy = -170; e.vx = (e.x + e.w/2 < r.x + r.w/2 ? -1 : 1)*60; e.face = Math.sign(e.vx); } } }
+function updateRider(e, dt, p){   /* a raider in a tub boat: faces the hero, winds up ("!" + a swelling bubble), then blows one slow bubble at the hero */
+  const m = G.movers[e.ri], B = BUBBLE; if (!m){ e.alive = false; return; }
+  e.x = m.x + (m.w - e.w)/2; e.y = m.y - e.h; e.vy = 0; e.onGround = true;
+  const dx = (p.x + p.w/2) - (e.x + e.w/2), sx = e.x - G.cam; e.face = Math.sign(dx) || -1;
+  if (e.type === 'meep' || e.type === 'dragon') e.y += Math.round(Math.sin(e.t*5)*1);
+  if (e.st === 'idle'){ e.cool -= dt;
+    if (e.cool <= 0 && !p.dead && !p.clear && sx > 10 && sx < W - e.w - 6 && Math.abs(dx) < B.range && Math.abs(dx) > B.min && !G.eshots.some(s => s.from === e)){ e.st = 'wind'; e.stT = B.wind; sfx('windup'); } }
+  else if (e.st === 'wind'){ e.stT -= dt;
+    if (e.stT <= 0){ const x0 = e.x + e.w/2 + e.face*(e.w/2 + 4), y0 = e.y + 5, ty = p.y + p.h/2, T = Math.max(.6, Math.abs(p.x + p.w/2 - x0)/B.speed);
+      e.st = 'throw'; e.stT = .3; sfx('bubble'); G.bubbles = (G.bubbles || 0) + 1;
+      G.eshots.push({ kind:'bubble', x:x0, y:y0, vx:(G.camV || 0) + e.face*B.speed, vy:clamp((ty - y0)/T, -20, 20), t:0, r:B.r, hr:5, life:B.life, from:e, ph:Math.random()*6 }); } }
+  else if (e.st === 'throw'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'idle'; e.cool = B.cool + Math.random()*.6; } } }
+function popBubble(s){ s.dead = 1; sfx('pop'); for (let i = 0; i < 8; i++){ const a = i/8*Math.PI*2; G.parts.push({ x:s.x + Math.cos(a)*s.r, y:s.y + Math.sin(a)*s.r, vx:Math.cos(a)*60, vy:Math.sin(a)*60, life:.3, color:'#c8f0ff', s:2 }); } }
+function bubbleShot(s, p){   /* slow wobbly bubble: a note pops it, a stomp bounces off it, it pops by itself on the water or after 5 s; touching it costs a heart */
+  s.y += Math.sin(s.t*6 + s.ph)*.25;
+  if (s.y > MOAT.water - 4 || solid(Math.floor(s.x/TS), Math.floor(s.y/TS)) || s.t > s.life || s.dead){ if (!s.dead || s.t > s.life) popBubble(s); return; }
+  const box = { x:s.x - 5, y:s.y - 5, w:10, h:10 };
+  for (const n of G.shots) if (!n.dead && overlap({ x:n.x, y:n.y, w:6, h:6 }, { x:s.x - 7, y:s.y - 7, w:14, h:14 })){ n.dead = 1; G.bubblePops = (G.bubblePops || 0) + 1; popBubble(s); return; }
+  if (p.dead) return;
+  if (p.vy > 30 && p.y + p.h - box.y < 10 && overlap(p, box)){ p.vy = input.jump ? -380 : -260; G.stompedShots = (G.stompedShots || 0) + 1; popBubble(s); return; }   // stomp it = bounce
+  if (overlap(p, box)){ popBubble(s); hurt('shot:bubble'); } }
+function updateArmor(e, dt, p){   /* Sir Clanks-a-Lot: clank, clank (patrols) → raises his sword ("!") → lunges about two tiles → rests (stomp him!) */
+  const A = ARMOR, dx = (p.x + p.w/2) - (e.x + e.w/2), dy = (e.y + e.h) - (p.y + p.h), sx = e.x - G.cam;
+  e.vy = Math.min(400, e.vy + 1000*dt); moveY(e, e.vy*dt); if (e.y > H + 40){ e.alive = false; return; }
+  const home = (e.homeX ??= e.x), edge = d => { const fx = Math.floor((d > 0 ? e.x + e.w + 2 : e.x - 2)/TS), fy = Math.floor((e.y + e.h + 2)/TS); return !solid(fx, fy) && tileAt(fx, fy) !== 5; };
+  e.stT = (e.stT || 0) - dt;
+  if (e.st === 'idle'){ e.cool -= dt; const d = Math.sign(e.vx) || -1; moveX(e, d*A.speed*dt); e.face = d;
+    if (e.hitWall || (e.onGround && edge(d)) || Math.abs(e.x - home) > 40) e.vx = -Math.sign(e.x - home || d)*A.speed;
+    e.stepT = (e.stepT || 0) - dt; if (e.stepT <= 0){ e.stepT = .45; e.clk = (e.clk || 0) + 1; if (sx > -8 && sx < W + 8 && Math.abs(dx) < 140 && G.t - (G.clankT ?? -9) > .4){ G.clankT = G.t; sfx('step'); } }
+    if (e.cool <= 0 && e.onGround && !p.dead && !p.clear && sx > 8 && sx < W - 22 && Math.abs(dx) < A.range && Math.abs(dx) > A.min && dy > -6 && dy < A.rise){ e.st = 'wind'; e.stT = A.wind; e.face = Math.sign(dx) || -1; sfx('windup'); } }
+  else if (e.st === 'wind'){ if (e.stT <= 0){ e.st = 'lunge'; e.stT = A.lunge; sfx('clank'); G.lunges = (G.lunges || 0) + 1; } }
+  else if (e.st === 'lunge'){ if (!(e.onGround && edge(e.face))) moveX(e, e.face*A.dash*dt); if (e.hitWall || e.stT <= 0){ e.st = 'rest'; e.stT = A.rest; } }
+  else if (e.st === 'rest'){ if (e.stT <= 0){ e.st = 'idle'; e.cool = A.cool + Math.random()*.8; e.vx = e.face*A.speed; } } }
 function hitEnemy(e){ if ((e.hp || 1) > 1){ e.hp--; e.flash = .3; sfx('bump'); puff(e.x + e.w/2, e.y + 4, '#ffffff', 4, 40); return; } kill(e); }
 function updateHopper(e, dt, K){ // Meep: sits a moment, then hops (never hops off a ledge or far from home)
   e.vy = Math.min(400, e.vy + 1000*dt);
@@ -1172,7 +1362,11 @@ function kill(e, stomp){ e.alive = false; e.dead = 1; e.vy = -200; sfx('stomp');
   if (e.type === 'meep'){ if (G.t - (G.meepT ?? -1) > .12){ G.meepT = G.t; sfx('meep'); G.meeps = (G.meeps || 0) + 1; }   // one squeak at a time even if a tuba blast pops several
     G.floats.push({ text:'MEEP!', x:e.x + e.w/2, y:e.y - 6, t:0 }); }
   if (e.type === 'frog') G.floats.push({ text:'RIBBIT!', x:e.x + e.w/2, y:e.y - 8, t:0 });
-  if (e.type === 'reindeer') G.floats.push({ text:'JINGLE!', x:e.x + e.w/2, y:e.y - 8, t:0 }); }
+  if (e.type === 'reindeer') G.floats.push({ text:'JINGLE!', x:e.x + e.w/2, y:e.y - 8, t:0 });
+  if (e.type === 'skeleton'){ G.floats.push({ text:'CLATTER!', x:e.x + e.w/2, y:e.y - 8, t:0 }); sfx('rattle'); G.bones = (G.bones || 0) + 1;
+    for (let i = 0; i < 8; i++) G.parts.push({ x:e.x + e.w/2, y:e.y + 6, vx:(Math.random() - .5)*140, vy:-80 - Math.random()*120, life:.7, color:i % 2 ? '#f4f0e0' : '#c8c0a0', s:2 }); }
+  if (e.type === 'armor'){ G.floats.push({ text:'CLANK!', x:e.x + e.w/2, y:e.y - 8, t:0 }); sfx('clank'); G.clanked = (G.clanked || 0) + 1;
+    for (let i = 0; i < 8; i++) G.parts.push({ x:e.x + e.w/2, y:e.y + 8, vx:(Math.random() - .5)*150, vy:-90 - Math.random()*120, life:.7, color:i % 2 ? '#9aa0b4' : '#d0d4e4', s:3 }); } }
 function bonk(tx, ty){ const v = tileAt(tx, ty); G.bumps.push({ tx, ty, t:0 });
   if (v === 3){ G.L.map[ty*G.L.w + tx] = 4; const lucky = (hash(tx + ':' + ty) % 7 === 0) && G.p.hearts < G.maxHearts;
     const chordBlock = !G.chord && hash('c' + tx + ':' + ty) % 9 === 0;
@@ -1180,7 +1374,7 @@ function bonk(tx, ty){ const v = tileAt(tx, ty); G.bumps.push({ tx, ty, t:0 });
   else if (v === 8){ G.L.map[ty*G.L.w + tx] = 4; const dir = tileAt(tx + 1, ty - 1) || tileAt(tx + 1, ty) === 6 ? -1 : 1;
     G.pickups.push({ kind:'tuba', x:tx*TS + 8, y:(ty - 1)*TS + 4, vx:dir*36, vy:0, t:0, home:{ x:tx*TS + 8, y:(ty - 1)*TS + 4 } }); sfx('power'); puff(tx*TS + 8, ty*TS, '#fff3a0', 10, 80); }
   else sfx('bump');
-  for (const e of G.enemies) if (e.alive && Math.abs(e.x + e.w/2 - (tx*TS + 8)) < 7 + e.w/2 && Math.abs(e.y + e.h - ty*TS) < 4) kill(e); }
+  for (const e of G.enemies) if (e.alive && !e.sub && Math.abs(e.x + e.w/2 - (tx*TS + 8)) < 7 + e.w/2 && Math.abs(e.y + e.h - ty*TS) < 4) kill(e); }
 // ---------- GIANT TUBA ----------
 function tubaPickup(pk, dt){ // rises out of the block, then drifts sideways and floats down until it rests on the ground
   const p = G.p; pk.t += dt;
@@ -1202,14 +1396,14 @@ function updateBombs(dt){
   for (const b of G.bombs){ b.t += dt; b.vy = Math.min(380, b.vy + 700*dt); b.x += b.vx*dt; b.y += b.vy*dt;
     if (Math.random() < .5) G.parts.push({ x:b.x + 3, y:b.y - 6, vx:(Math.random() - .5)*20, vy:-30, life:.25, color:Math.random() < .5 ? '#ffd23f' : '#ff8c42', s:1 });
     const box = { x:b.x - 4, y:b.y - 4, w:8, h:8 }, tx = Math.floor(b.x/TS), ty = Math.floor((b.y + 4)/TS);
-    const hit = solid(tx, ty) || (tileAt(tx, ty) === 5 && b.vy > 0 && b.y + 4 - ty*TS < 8) || G.enemies.some(e => e.alive && overlap(box, e)) || (bhb && overlap(box, bhb)) || b.t > 2.5;
+    const hit = solid(tx, ty) || (tileAt(tx, ty) === 5 && b.vy > 0 && b.y + 4 - ty*TS < 8) || G.enemies.some(e => e.alive && !e.sub && overlap(box, e)) || (bhb && overlap(box, bhb)) || b.t > 2.5;
     if (b.y > H + 16) b.dead = 1; else if (hit){ b.dead = 1; blast(b.x, b.y); } }
   G.bombs = G.bombs.filter(b => !b.dead);
   for (const q of G.blasts) q.t += dt; G.blasts = G.blasts.filter(q => q.t < .9); }
 function blast(cx, cy){ const R = TUBA.radius; let ko = 0; sfx('bwaamp'); G.shake = .4; G.bigShake = .3; G.blasts.push({ x:cx, y:cy, t:0 });
   for (let i = 0; i < 26; i++) puff(cx, cy, ['#fff3a0','#ffd23f','#ff8c42','#ffffff','#1a1030'][i%5], 1, 170);
-  for (const e of G.enemies) if (e.alive && Math.hypot(e.x + e.w/2 - cx, e.y + e.h/2 - cy) < R + 8){ kill(e); ko++; }
-  for (const s of G.eshots) if (!s.dead && (s.kind === 'arrow' || s.kind === 'ball' || s.kind === 'barrel' || s.kind === 'note' || s.kind === 'whole' || s.kind === 'piano' || s.kind === 'antler') && Math.hypot(s.x - cx, s.y - cy) < R + 8){ if (s.kind === 'piano') breakPiano(s, false); else if (s.kind === 'antler') breakAntler(s); else s.dead = 1; }
+  for (const e of G.enemies) if (e.alive && !e.sub && Math.hypot(e.x + e.w/2 - cx, e.y + e.h/2 - cy) < R + 8){ kill(e); ko++; }
+  for (const s of G.eshots) if (!s.dead && (s.kind === 'arrow' || s.kind === 'ball' || s.kind === 'barrel' || s.kind === 'note' || s.kind === 'whole' || s.kind === 'piano' || s.kind === 'antler' || s.kind === 'bubble') && Math.hypot(s.x - cx, s.y - cy) < R + 8){ if (s.kind === 'piano') breakPiano(s, false); else if (s.kind === 'antler') breakAntler(s); else if (s.kind === 'bubble') popBubble(s); else s.dead = 1; }
   const B = G.B; if (B && !B.gone && B.state !== 'intro' && !B.ghost){ const nx = clamp(cx, B.x, B.x + B.w), ny = clamp(cy, B.y, B.y + B.h);
     if (Math.hypot(nx - cx, ny - cy) < R){ damageBoss(TUBA.bossDmg, true); ko++; } }
   const w = G.L.w, tmin = Math.floor((cx - R)/TS), tmax = Math.floor((cx + R)/TS);
@@ -1303,7 +1497,7 @@ function draw(){
   x.drawImage(G.bg.sky, 0, 0); x.save(); if (G.bigShake) x.translate(0, Math.round((Math.random() - .5)*8));
   const par = (img, f) => { const o = -Math.round(cam*f) % 512; x.drawImage(img, o, 0); x.drawImage(img, o + 512, 0); if (o + 1024 < W + 512) x.drawImage(img, o + 1024, 0); };
   par(G.bg.far, .25); par(G.bg.near, .5);
-  if (G.base.deco) (G.base.pirate ? drawShipDeco : drawSpecialDeco)(x, cam);
+  if (G.base.deco) (G.base.pirate ? drawShipDeco : G.base.moat ? drawMoatDeco : drawSpecialDeco)(x, cam);
   // tiles
   const t0 = Math.floor(cam/TS), t1 = Math.min(G.L.w - 1, t0 + 17);
   for (let tx = t0; tx <= t1; tx++) for (let ty = 0; ty < ROWS; ty++){ const v = G.L.map[ty*G.L.w + tx]; if (!v) continue;
@@ -1332,6 +1526,8 @@ function draw(){
     else if (e.type === 'meep') fi = e.onGround || !e.alive ? 0 : 1; else if (e.type === 'dragon') fi = Math.floor(e.t*5) % 2;
     else if (e.type === 'frog') fi = e.st === 'wind' ? 2 : e.st === 'throw' ? 3 : Math.floor(e.t*1.6) % 2;
     else if (e.type === 'reindeer') fi = e.antlerOut ? 3 : e.st === 'wind' ? 2 : Math.floor(e.t*2) % 2;
+    else if (e.type === 'armor') fi = e.st === 'wind' ? 2 : e.st === 'lunge' ? 3 : e.st === 'rest' ? 0 : (e.clk || 0) % 2;
+    else if (e.type === 'skeleton'){ if (e.sub && e.alive) continue; fi = e.st === 'leap' || e.st === 'dive' || !e.alive ? 2 : Math.floor(e.t*5) % 2; }
     const fr = SP.enemyFrames(e.type)[fi], img = e.face > 0 ? fr.l : fr.r;
     if (!e.alive){ x.save(); x.translate(Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h/2)); x.scale(1, -1); x.drawImage(img, -Math.round(img.width/2), -Math.round(img.height/2)); x.restore(); continue; }
     if (e.flash > 0 && Math.floor(G.t*30) % 2) continue;
@@ -1339,7 +1535,9 @@ function draw(){
     x.drawImage(img, ex, Math.round(e.y + e.h - img.height)); if (G.base.pirate) pirateHat(x, e, ex, Math.round(e.y + e.h - img.height), img);
     if (e.type === 'frog' && e.st === 'wind'){ const py = Math.round(e.y + e.h - img.height) - 12 - Math.round(Math.sin(G.t*20)); x.drawImage(SP.item('piano'), Math.round(e.x - cam + e.w/2 - 8), py);   // piano held overhead
       if (e.mark) landMarker(x, e.mark, cam, 1 - e.stT/PIANO.wind); alertBubble(x, Math.round(e.x - cam + e.w/2), py - 1, e.stT); }
-    else if (e.st === 'wind') alertBubble(x, Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h - img.height) - 4, e.stT); }
+    else if (e.st === 'wind') alertBubble(x, Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h - img.height) - 4, e.stT);
+    if (e.ri != null && e.st === 'wind') drawBubbleAt(x, Math.round(e.x - cam + e.w/2 + e.face*(e.w/2 + 3)), Math.round(e.y + 6), Math.round(2 + (1 - e.stT/BUBBLE.wind)*4));   // the bubble swells at the raider's mouth
+    if (e.ri != null && e.type === 'hedgehog'){ const ey = Math.round(e.y + e.h - img.height); x.fillStyle = '#1a1030'; x.fillRect(ex + 3, ey - 2, 9, 3); x.fillStyle = '#3a6ee8'; x.fillRect(ex + 4, ey - 1, 7, 1); } }   // a little sailor cap
   // boss
   if (G.marks.length) drawMarks(x, cam);
   if (G.B && G.B.key === 'kurilla' && (!G.B.gone || G.B.gone > 1)) drawWizardBoss(x, G.B, cam);
@@ -1366,6 +1564,7 @@ function draw(){
       case 'note': case 'whole': drawNoteShot(x, s, sx, sy); break;
       case 'piano': { if (s.ty != null) landMarker(x, { x:s.tx, y:s.ty }, cam, 1 + s.t/s.T); x.save(); x.translate(sx, sy); x.rotate(Math.sin(s.t*7)*.35); x.drawImage(SP.item('piano'), -8, -6); x.restore(); break; }
       case 'antler': { x.save(); x.translate(sx, sy); x.rotate(s.t*14*s.dir); x.drawImage(SP.item('antler', { A:'#ecd6a4' }), -6, -4); x.restore(); break; }
+      case 'bubble': drawBubbleAt(x, sx, sy, s.r); break;
       case 'orb': x.fillStyle = '#9b5de5'; x.fillRect(sx - 3, sy - 3, 6, 6); x.fillStyle = '#ffffff'; x.fillRect(sx - 1, sy - 2, 2, 2); break;
       default: x.fillStyle = '#1a1030'; x.fillRect(sx - 5, sy - 5, 10, 10); x.fillStyle = '#9aa0b4'; x.fillRect(sx - 4, sy - 4, 8, 8); x.fillStyle = '#d0d4e4'; x.fillRect(sx - 3, sy - 3, 3, 2);
     } }
@@ -1387,7 +1586,7 @@ function draw(){
   // particles
   for (const q of G.parts){ x.fillStyle = q.color; x.fillRect(Math.round(q.x - cam), Math.round(q.y), q.s, q.s); }
   for (const f of G.floats){ if (f.t > .6 && Math.floor(f.t*20) % 2) continue; SP.text(x, f.text, Math.round(f.x - cam - SP.textWidth(f.text)/2), Math.round(f.y), '#ffffff', '#1a1030'); }   // tiny 'MEEP!' pop (over the hero)
-  if (G.base.auto){ drawSea(x, cam); drawPushHint(x, cam); }
+  if (G.base.auto){ if (G.base.moat) drawMoatWater(x, cam); else drawSea(x, cam); drawPushHint(x, cam); }
   if (G.base.port) drawHarborWater(x, cam);
   if (G.base.indoor) indoorLight(x, cam);
   if (G.base.indoor === 'coop') drawHenBubbles(x, cam);
@@ -1436,6 +1635,8 @@ function drawMovers(x, cam){ const k = '#2e1a0c';
       line(x, rx, my - 8, mx + 3, my, '#e8d8b0'); line(x, rx, my - 8, mx + m.w - 4, my, '#e8d8b0');
       x.fillStyle = '#1a1030'; x.fillRect(mx, my, m.w, 7); x.fillStyle = '#a8743e'; x.fillRect(mx + 1, my + 1, m.w - 2, 4); x.fillStyle = '#f2f6ff'; x.fillRect(mx + 1, my + 1, m.w - 2, 1); x.fillStyle = '#6a4424'; for (let i = mx + 8; i < mx + m.w - 2; i += 8) x.fillRect(i, my + 2, 1, 3);
       x.fillStyle = '#1a1030'; x.fillRect(mx + 6, my + 7, m.w - 12, 8); x.fillStyle = '#c8b088'; x.fillRect(mx + 7, my + 7, m.w - 14, 7); x.fillStyle = '#1a1030'; for (let i = mx + 9; i < mx + m.w - 8; i += 5) x.fillRect(i, my + 7, 1, 7); continue; }
+    if (m.drift){ drawLogRaft(x, mx, my, m.w); continue; }
+    if (m.eraft){ drawTub(x, mx, my, m.w); continue; }
     if (m.kind === 'swing'){ const ax = Math.round(m.bx + m.w/2 - cam), ay = 22; line(x, ax, ay, mx + 4, my, '#e8d8b0'); line(x, ax, ay, mx + m.w - 5, my, '#e8d8b0'); x.fillStyle = k; x.fillRect(ax - 3, ay - 3, 7, 4); }
     else { for (const bx of [mx + 4, mx + m.w - 18]){ x.fillStyle = k; x.fillRect(bx, my + 5, 14, 13); x.fillStyle = '#a8642a'; x.fillRect(bx + 1, my + 6, 12, 11); x.fillStyle = '#5a5e76'; x.fillRect(bx + 1, my + 8, 12, 2); x.fillRect(bx + 1, my + 14, 12, 2); } }
     x.fillStyle = k; x.fillRect(mx, my, m.w, 7); x.fillStyle = '#c8925a'; x.fillRect(mx + 1, my + 1, m.w - 2, 4); x.fillStyle = '#f0c080'; x.fillRect(mx + 1, my + 1, m.w - 2, 1);
@@ -1523,10 +1724,70 @@ function drawHenBubbles(x, cam){ const t = G.t, k = '#1a1030';
 function islandUnder(x, tx, ty, cam){ const h = hash(tx + 'u') % 3, bx = tx*TS - cam, by = (ty + 1)*TS;
   x.fillStyle = '#5a3416'; x.fillRect(bx, by, TS, 3); x.fillRect(bx + 2 + h, by + 3, 12 - h*2, 4); x.fillRect(bx + 5, by + 7, 6 - h, 3 + h);
   x.fillStyle = '#8a5a2a'; x.fillRect(bx + 1, by, TS - 2, 2); x.fillRect(bx + 3 + h, by + 3, 10 - h*2, 3); x.fillStyle = '#2f8a2f'; if (h === 1) x.fillRect(bx + 12, by + 2, 1, 6); }
-function drawSpecialDeco(x, cam){ const t = G.t, ws = G.base.indoor === 'workshop', co = G.base.indoor === 'coop', k = '#2e170a';
+// ---------- World 5 drawing: the Moonlit Moat + the Knight's Closet ----------
+function drawBubbleAt(x, cx, cy, r){ if (r < 1) return; x.fillStyle = 'rgba(150,215,255,.32)'; for (let i = -r; i <= r; i++){ const hw = Math.round(Math.sqrt(r*r - i*i)); x.fillRect(cx - hw, cy + i, hw*2, 1); }
+  x.fillStyle = '#c8f0ff'; const n = Math.max(12, r*5); for (let a = 0; a < n; a++){ const an = a/n*Math.PI*2; x.fillRect(Math.round(cx + Math.cos(an)*r - .5), Math.round(cy + Math.sin(an)*r - .5), 1, 1); }
+  x.fillStyle = '#ffffff'; x.fillRect(cx - Math.ceil(r/2), cy - Math.ceil(r/2), 2, 2); if (r > 3) x.fillRect(cx - Math.ceil(r/2) + 2, cy - Math.ceil(r/2) - 1, 1, 1); }
+function drawLogRaft(x, mx, my, w){ const k = '#1e1008';   // the hero's log raft with a lantern on a pole
+  for (let i = 0; i < w; i += 8){ x.fillStyle = k; x.fillRect(mx + i, my + 2, 8, 9); x.fillStyle = (i/8) % 2 ? '#8a5a2a' : '#7a4a22'; x.fillRect(mx + i + 1, my + 3, 6, 7); x.fillStyle = '#c8925a'; x.fillRect(mx + i + 2, my + 5, 4, 3); x.fillStyle = '#7a4a22'; x.fillRect(mx + i + 3, my + 6, 2, 1); }
+  x.fillStyle = k; x.fillRect(mx, my, w, 3); x.fillStyle = '#a8743e'; x.fillRect(mx + 1, my, w - 2, 2); x.fillStyle = '#d8a060'; x.fillRect(mx + 1, my, w - 2, 1);
+  x.fillStyle = '#e8d8b0'; for (const rx of [mx + 14, mx + w - 18]) x.fillRect(rx, my + 2, 2, 9);
+  const lx = mx + 5; x.fillStyle = k; x.fillRect(lx, my - 24, 2, 24); x.fillRect(lx - 3, my - 32, 8, 9); x.fillStyle = Math.sin(G.t*8) > -.6 ? '#ffd23f' : '#ffb040'; x.fillRect(lx - 2, my - 31, 6, 7); x.fillStyle = '#fff3a0'; x.fillRect(lx - 1, my - 29, 2, 3);
+  glow(x, lx + 1, my - 28, 9); }
+function drawTub(x, mx, my, w){ const k = '#1e1008', pa = Math.round(Math.sin(G.t*4)*3);   // a raider's little half-barrel boat with a paddle
+  line(x, mx + w - 8, my - 10, mx + w + 3, my + 11 + pa, '#c8925a'); x.fillStyle = '#a8743e'; x.fillRect(mx + w + 1, my + 8 + pa, 4, 6);
+  x.fillStyle = k; x.fillRect(mx, my, w, 10); x.fillRect(mx + 2, my + 10, w - 4, 3); x.fillStyle = '#6b3f1f'; x.fillRect(mx + 1, my + 1, w - 2, 9); x.fillRect(mx + 3, my + 10, w - 6, 2);
+  x.fillStyle = '#4e2c14'; for (let i = mx + 6; i < mx + w - 3; i += 7) x.fillRect(i, my + 1, 1, 10); x.fillStyle = '#5a5e76'; x.fillRect(mx + 1, my + 3, w - 2, 1); x.fillRect(mx + 1, my + 7, w - 2, 1); x.fillStyle = '#a8743e'; x.fillRect(mx + 1, my + 1, w - 2, 1); }
+function drawMoatWater(x, cam){ const t = G.t, c0 = Math.round(cam), WY = MOAT.water;   // dark moat water in front, with the moon's reflection and skeleton ripples
+  for (let sx = 0; sx < W; sx += 2){ const wx = sx + c0, y0 = WY + Math.round(Math.sin(wx*.05 + t*1.6)*1.2 + Math.sin(wx*.019 - t*.9));
+    x.fillStyle = 'rgba(12,16,46,.92)'; x.fillRect(sx, y0, 2, H - y0); x.fillStyle = '#4a5ab0'; x.fillRect(sx, y0, 2, 1);
+    if ((((wx >> 1) + Math.floor(t*2)) % 19) === 0){ x.fillStyle = '#c8d0ff'; x.fillRect(sx, y0 - 1, 2, 1); } }
+  const o = -Math.round(cam*.25) % 512; for (const m of [o + 380, o + 892]) if (m > -40 && m < W + 40) for (let y = WY + 4; y < H; y += 3){ const sp = 4 + (y - WY)*.5; x.fillStyle = 'rgba(255,246,200,.3)'; x.fillRect(Math.round(m - sp + Math.sin(t*2 + y)*3), y, Math.max(2, Math.round(sp*2*(.5 + .3*Math.sin(y*1.3 + t*3)))), 1); }
+  x.fillStyle = 'rgba(40,140,60,.8)'; for (let i = 0; i < 6; i++){ const span = W + 40, px = Math.round((((i*97 - cam) % span) + span) % span - 20), py = WY + 6 + (i*7) % 14; x.fillRect(px, py, 7, 2); x.fillRect(px + 1, py - 1, 5, 1); }   // lily pads
+  for (const e of G.enemies) if (e.alive && e.st === 'ripple'){ const cx = Math.round(e.x + e.w/2 - cam), k = 1 - e.stT/SKEL.ripple;
+    for (let r = 0; r < 3; r++){ const rr = Math.round(((k*2 + r/3) % 1)*12) + 3; x.fillStyle = 'rgba(210,230,255,.85)'; x.fillRect(cx - rr, WY + 2, 3, 1); x.fillRect(cx + rr - 3, WY + 2, 3, 1); x.fillRect(cx - rr + 2, WY + 1, rr*2 - 4, 1); }
+    x.fillStyle = '#c8f0ff'; for (let i = 0; i < 3; i++){ const by = WY - 1 - ((t*26 + i*6) % 12), bx = cx - 4 + i*4 + Math.round(Math.sin(t*6 + i)); x.fillRect(bx, Math.round(by), 2, 2); }
+    if (Math.floor(t*8) % 4){ x.fillStyle = '#7cf0ff'; x.fillRect(cx - 3, WY + 7, 2, 2); x.fillRect(cx + 2, WY + 7, 2, 2); } } }   // two glowing eyes under the water
+function drawMoatDeco(x, cam){ const t = G.t, k = '#14102a';   // stone landings: the castle water gate, a little tower, the checkpoint lamp, the castle door
+  for (const d of G.base.deco){ if (d.k !== 'landing') continue; const x0 = Math.round(d.x0*TS - cam), x1 = Math.round((d.x1 + 1)*TS - cam); if (x1 < -120 || x0 > W + 120) continue; const fy = 12*TS;
+    if (d.kind === 'gate'){ x.fillStyle = k; x.fillRect(x0 - 4, fy - 92, 70, 92); x.fillStyle = '#4a4e66'; x.fillRect(x0 - 3, fy - 91, 68, 91); x.fillStyle = '#363a50'; for (let y = fy - 86; y < fy; y += 10) x.fillRect(x0 - 3, y, 68, 1);
+      for (let i = 0; i < 6; i++){ x.fillStyle = k; x.fillRect(x0 - 4 + i*12, fy - 100, 8, 9); x.fillStyle = '#4a4e66'; x.fillRect(x0 - 3 + i*12, fy - 99, 6, 8); }
+      x.fillStyle = '#100c22'; x.fillRect(x0 + 12, fy - 52, 38, 52); for (let r = 0; r < 19; r++){ const hw = Math.round(Math.sqrt(361 - (19 - r)**2)); x.fillRect(x0 + 31 - hw, fy - 71 + r, hw*2, 1); }
+      x.fillStyle = '#5a5e76'; for (let gx = x0 + 14; gx < x0 + 50; gx += 6) x.fillRect(gx, fy - 66, 2, 40); for (let gy = fy - 62; gy < fy - 26; gy += 8) x.fillRect(x0 + 13, gy, 36, 2); for (let gx = x0 + 14; gx < x0 + 50; gx += 6){ x.fillRect(gx, fy - 26, 2, 3); }   // raised portcullis
+      x.fillStyle = '#c0283a'; x.fillRect(x0 + 30, fy - 124, 1, 24); x.fillRect(x0 + 31, fy - 124, 10, 6); }
+    else if (d.kind === 'tower'){ const tx = x0 + 8, tw = x1 - x0 - 16; x.fillStyle = k; x.fillRect(tx - 1, fy - 150, tw + 2, 150); x.fillStyle = '#4a4e66'; x.fillRect(tx, fy - 149, tw, 149); x.fillStyle = '#363a50'; for (let y = fy - 144; y < fy; y += 10) x.fillRect(tx, y, tw, 1);
+      for (let r = 0; r < 30; r++){ const hw = Math.round((r/30)*(tw/2 + 6)); x.fillStyle = r % 6 === 5 ? '#3a2a6a' : '#2a1e5a'; x.fillRect(tx + tw/2 - hw, fy - 180 + r, hw*2, 1); }
+      x.fillStyle = '#ffd23f'; x.fillRect(tx + tw/2 - 3, fy - 132, 6, 9); x.fillRect(tx + tw/2 - 3, fy - 104, 6, 9); x.fillStyle = k; x.fillRect(tx + tw/2, fy - 132, 1, 9); x.fillRect(tx + tw/2, fy - 104, 1, 9);
+      x.fillStyle = '#2f5a3a'; for (let i = 0; i < 6; i++) x.fillRect(tx + 3 + i*11 % tw, fy - 40 + (i*13) % 30, 3, 6); }
+    else if (d.kind === 'cp' || d.kind === 'end'){ const lx = x0 + 10; x.fillStyle = k; x.fillRect(lx, fy - 44, 3, 44); x.fillRect(lx - 4, fy - 54, 11, 11); x.fillStyle = Math.sin(t*7) > -.7 ? '#ffd23f' : '#ffb040'; x.fillRect(lx - 3, fy - 53, 9, 9); x.fillStyle = '#fff3a0'; x.fillRect(lx - 1, fy - 51, 4, 4); glow(x, lx + 1, fy - 49, 12);
+      if (d.kind === 'end'){ const dx = x0 + 120; x.fillStyle = k; x.fillRect(dx - 2, fy - 120, 132, 120); x.fillStyle = '#4a4e66'; x.fillRect(dx - 1, fy - 119, 130, 119); x.fillStyle = '#363a50'; for (let y = fy - 114; y < fy; y += 10) x.fillRect(dx - 1, y, 130, 1);
+        for (let i = 0; i < 11; i++){ x.fillStyle = k; x.fillRect(dx - 2 + i*12, fy - 128, 8, 9); x.fillStyle = '#4a4e66'; x.fillRect(dx - 1 + i*12, fy - 127, 6, 8); }
+        x.fillStyle = '#100c22'; x.fillRect(dx + 44, fy - 50, 40, 50); for (let r = 0; r < 20; r++){ const hw = Math.round(Math.sqrt(400 - (20 - r)**2)); x.fillRect(dx + 64 - hw, fy - 70 + r, hw*2, 1); }
+        x.fillStyle = '#6b3f1f'; x.fillRect(dx + 47, fy - 47, 34, 47); x.fillStyle = '#4e2c14'; for (let i = dx + 52; i < dx + 80; i += 7) x.fillRect(i, fy - 47, 1, 47); x.fillStyle = '#5a5e76'; x.fillRect(dx + 47, fy - 38, 34, 2); x.fillRect(dx + 47, fy - 16, 34, 2); x.fillStyle = '#ffd23f'; x.fillRect(dx + 74, fy - 26, 3, 3);   // big castle door
+        for (const bx of [dx + 22, dx + 100]){ x.fillStyle = '#c0283a'; x.fillRect(bx, fy - 110, 14, 34); x.fillStyle = '#ffd23f'; x.fillRect(bx + 5, fy - 100, 4, 6); x.fillStyle = '#c0283a'; for (let r = 0; r < 5; r++){ x.fillRect(bx, fy - 76 + r, 7 - r, 1); x.fillRect(bx + 7 + r, fy - 76 + r, 7 - r, 1); } } } }
+    x.fillStyle = k; for (const bx of [x0 + 2, x1 - 7]){ x.fillRect(bx, fy - 9, 6, 9); x.fillStyle = '#6b4a30'; x.fillRect(bx + 1, fy - 8, 4, 8); x.fillStyle = '#e8d8b0'; x.fillRect(bx, fy - 6, 6, 1); x.fillStyle = k; } } }   // mooring posts
+function drawTorch(x, lx, fy, ph){ const k = '#1a1030', fl = Math.round(Math.sin(ph*12)*1.5);   // wall torch: iron bracket, wooden handle, flickering flame
+  x.fillStyle = k; x.fillRect(lx - 2, fy + 2, 5, 14); x.fillStyle = '#6b3f1f'; x.fillRect(lx - 1, fy + 3, 3, 12); x.fillStyle = '#5a5e76'; x.fillRect(lx - 4, fy + 2, 9, 2); x.fillRect(lx - 3, fy + 12, 7, 2);
+  x.fillStyle = '#ff6a30'; x.fillRect(lx - 3, fy - 6 + fl, 7, 8 - fl); x.fillRect(lx - 1, fy - 9 + fl, 3, 3); x.fillStyle = '#ffb040'; x.fillRect(lx - 2, fy - 4, 5, 6); x.fillStyle = '#fff3a0'; x.fillRect(lx - 1, fy - 2, 3, 3); }
+function drawHelm(x, bx, y, i){ const k = '#1a1030'; x.fillStyle = k; x.fillRect(bx, y - 10, 11, 10); x.fillRect(bx + 1, y - 11, 9, 1); x.fillStyle = '#9aa0b4'; x.fillRect(bx + 1, y - 10, 9, 10); x.fillStyle = '#d0d4e4'; x.fillRect(bx + 2, y - 9, 2, 4);
+  x.fillStyle = k; x.fillRect(bx + 3, y - 6, 6, 1); x.fillRect(bx + 3, y - 4, 6, 1); x.fillStyle = '#5a5e76'; x.fillRect(bx + 5, y - 10, 1, 3);
+  if (i % 2){ x.fillStyle = '#c0283a'; x.fillRect(bx + 4, y - 15, 3, 5); x.fillRect(bx + 7, y - 14, 2, 2); } }
+function drawShield(x, px, py, s){ const k = '#1a1030', col = ['#3a6ee8', '#c0283a', '#3a9a5a'][s % 3];
+  x.fillStyle = '#5a5e76'; x.fillRect(px + 5, py - 6, 2, 6); x.fillStyle = k; x.fillRect(px - 1, py - 1, 14, 12); for (let r = 0; r < 6; r++) x.fillRect(px - 1 + r, py + 11 + r, 14 - r*2, 1);
+  x.fillStyle = col; x.fillRect(px, py, 12, 11); for (let r = 0; r < 5; r++) x.fillRect(px + r + 1, py + 11 + r, 10 - r*2, 1); x.fillStyle = '#ffd23f'; x.fillRect(px + 5, py + 1, 2, 13); x.fillRect(px + 1, py + 4, 10, 2); x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(px + 1, py + 1, 3, 2); }
+function drawArmorStand(x, px, fy, i){ const k = '#1a1030', s = '#737990', S = '#4a4e66', hl = '#a4aabe';   // a bit dimmer than Sir Clanks-a-Lot so the real bad guy stands out   // a suit of armor on a wooden stand, with a pair of boots
+  x.fillStyle = k; x.fillRect(px + 4, fy - 4, 12, 4); x.fillStyle = '#5a3416'; x.fillRect(px + 5, fy - 3, 10, 2); x.fillRect(px + 9, fy - 12, 2, 8);
+  x.fillStyle = k; x.fillRect(px + 3, fy - 32, 14, 20); x.fillStyle = s; x.fillRect(px + 4, fy - 31, 12, 18); x.fillStyle = hl; x.fillRect(px + 5, fy - 30, 2, 15); x.fillStyle = S; x.fillRect(px + 4, fy - 22, 12, 1); x.fillRect(px + 10, fy - 31, 1, 9);
+  x.fillStyle = k; x.fillRect(px, fy - 31, 4, 14); x.fillRect(px + 16, fy - 31, 4, 14); x.fillStyle = S; x.fillRect(px + 1, fy - 30, 2, 12); x.fillRect(px + 17, fy - 30, 2, 12);
+  x.fillStyle = k; x.fillRect(px + 5, fy - 43, 10, 11); x.fillStyle = s; x.fillRect(px + 6, fy - 42, 8, 9); x.fillStyle = k; x.fillRect(px + 7, fy - 39, 6, 2); x.fillStyle = hl; x.fillRect(px + 6, fy - 42, 2, 2);
+  x.fillStyle = i % 2 ? '#3a6ee8' : '#c0283a'; x.fillRect(px + 9, fy - 48, 3, 5); x.fillRect(px + 11, fy - 47, 3, 2);
+  x.fillStyle = '#4a3020'; x.fillRect(px + 1, fy - 6, 6, 6); x.fillRect(px + 1, fy - 2, 8, 2); x.fillRect(px + 13, fy - 6, 6, 6); x.fillRect(px + 13, fy - 2, 8, 2); x.fillStyle = '#6b4a30'; x.fillRect(px + 2, fy - 6, 2, 3); x.fillRect(px + 14, fy - 6, 2, 3);
+  if (i % 3 === 1) drawShield(x, px + 19, fy - 17, i); else if (i % 3 === 2){ x.fillStyle = '#d0d4e4'; x.fillRect(px + 21, fy - 34, 2, 28); x.fillStyle = '#c08a10'; x.fillRect(px + 18, fy - 8, 8, 2); x.fillRect(px + 21, fy - 6, 2, 5); } }   // leaning shield or sword
+function drawSpecialDeco(x, cam){ const t = G.t, ws = G.base.indoor === 'workshop', co = G.base.indoor === 'coop', ar = G.base.indoor === 'armory', k = ar ? '#1a1424' : '#2e170a';
   for (const d of G.base.deco){
     if (G.base.port){ drawPortDeco(x, d, cam); continue; }
     if (d.k === 'lantern'){ const lx = Math.round(d.x*TS + 8 - cam), sw = Math.round(Math.sin(t*1.5 + d.x)*2); if (lx < -20 || lx > W + 20) continue;
+      if (ar){ drawTorch(x, lx, d.len + 6, t + d.x); continue; }   // the Knight's Closet: wall torches instead of hanging lanterns
       x.fillStyle = '#1a1030'; x.fillRect(lx, 0, 1, d.len); const cx = lx + sw, cy = d.len;
       if (co){ x.fillStyle = '#1a1030'; x.fillRect(cx - 6, cy, 13, 6); x.fillStyle = '#b8bcc8'; x.fillRect(cx - 5, cy + 1, 11, 4); x.fillStyle = '#e0e4ec'; x.fillRect(cx - 4, cy + 1, 4, 1);   // warm heat lamp: metal dome + glowing bulb
         x.fillStyle = Math.sin(t*7 + d.x) > -.8 ? '#ff8c42' : '#ff6a30'; x.fillRect(cx - 2, cy + 5, 5, 4); x.fillStyle = '#fff3a0'; x.fillRect(cx - 1, cy + 5, 2, 2); }
@@ -1535,7 +1796,13 @@ function drawSpecialDeco(x, cam){ const t = G.t, ws = G.base.indoor === 'worksho
     else if (d.k === 'ladder'){ const lx = Math.round(d.x*TS + 3 - cam); if (lx < -16 || lx > W + 16) continue; const y0 = d.y0*TS, y1 = d.y1*TS;
       x.fillStyle = k; x.fillRect(lx - 1, y0, 3, y1 - y0); x.fillRect(lx + 9, y0, 3, y1 - y0); x.fillStyle = '#c8a878'; x.fillRect(lx, y0, 1, y1 - y0); x.fillRect(lx + 10, y0, 1, y1 - y0); for (let y = y0 + 6; y < y1; y += 8){ x.fillStyle = k; x.fillRect(lx, y - 1, 11, 3); x.fillStyle = '#c8a878'; x.fillRect(lx, y, 11, 1); } }
     else { const x0 = Math.round(d.x0*TS - cam), x1 = Math.round((d.x1 + 1)*TS - cam); if ((d.k !== 'chute' && (x1 < -20 || x0 > W + 20))) continue;
-      if (d.k === 'nests'){ const fy = 12*TS; for (let px = x0 + 4, i = 0; px < x1 - 18; px += 22, i++){ x.fillStyle = k; x.fillRect(px, fy - 20, 20, 20); x.fillStyle = '#a8703c'; x.fillRect(px + 1, fy - 19, 18, 18);   // nesting boxes on the floor
+      if (d.k === 'armor'){ const fy = 12*TS; for (let px = x0 + 6, i = 0; px < x1 - 18; px += 30, i++) drawArmorStand(x, px, fy, i + d.x0); }   // suits of armor on stands, boots, a leaning shield
+      else if (d.k === 'capes'){ const cx = Math.round(d.x*TS - cam); if (cx < -40 || cx > W + 40) continue; const ry = d.y1 - 30;   // capes on a hanging rod over a gap
+        x.fillStyle = '#1a1030'; x.fillRect(cx - 1, 0, 2, ry); x.fillRect(cx - 22, ry, 44, 3); x.fillStyle = '#9aa0b4'; x.fillRect(cx - 21, ry, 42, 1);
+        [[-20, '#8a1a2a'], [-6, '#5a1a6a'], [8, '#1f5a8a']].forEach(([o, col], i) => { const sw = Math.sin(t*1.4 + i); x.fillStyle = col; for (let r = 0; r < 30; r++){ const hw = 5 + Math.round(r*.12); x.fillRect(cx + o + 6 - hw + Math.round(sw*r/20), ry + 3 + r, hw*2, 1); } x.fillStyle = '#ffd23f'; x.fillRect(cx + o + 1, ry + 3, 10, 1); }); }
+      else if (d.k === 'helms'){ const y = d.y*TS; x.fillStyle = k; x.fillRect(x0 + 2, y + 6, 3, 12*TS - y - 6); x.fillRect(x1 - 5, y + 6, 3, 12*TS - y - 6); for (let bx = x0 + 6, i = 0; bx < x1 - 10; bx += 15, i++) drawHelm(x, bx, y, i); }   // helmet shelf
+      else if (d.k === 'shields'){ for (const [sx2, sy2] of d.at) drawShield(x, Math.round(sx2*TS - cam) + 2, sy2*TS + 7, sx2); }   // shields hung under the rack shelves
+      else if (d.k === 'nests'){ const fy = 12*TS; for (let px = x0 + 4, i = 0; px < x1 - 18; px += 22, i++){ x.fillStyle = k; x.fillRect(px, fy - 20, 20, 20); x.fillStyle = '#a8703c'; x.fillRect(px + 1, fy - 19, 18, 18);   // nesting boxes on the floor
           x.fillStyle = '#2a1608'; x.fillRect(px + 3, fy - 16, 14, 11); x.fillStyle = '#e8c050'; x.fillRect(px + 3, fy - 9, 14, 4);
           if (i % 2){ drawHen(x, px + 10, fy - 6, 1, false, false); } else { x.fillStyle = '#fff6e8'; x.fillRect(px + 6, fy - 11, 4, 5); x.fillStyle = '#e0b080'; x.fillRect(px + 11, fy - 10, 4, 4); } } }
       else if (d.k === 'hen'){ const h = henAt(d, t), sx = h.x - cam; if (sx < -20 || sx > W + 20) continue; drawHen(x, sx, 12*TS, h.face, h.peck); }
@@ -1551,7 +1818,7 @@ function drawSpecialDeco(x, cam){ const t = G.t, ws = G.base.indoor === 'worksho
       else if (d.k === 'roost' || d.k === 'shelf'){ const y = d.y*TS; x.fillStyle = k; x.fillRect(x0 + 2, y + 6, 3, 12*TS - y - 6); x.fillRect(x1 - 5, y + 6, 3, 12*TS - y - 6);
         if (d.k === 'roost'){ for (let bx = x0 + 10; bx < x1 - 12; bx += 22){ x.fillStyle = k; x.fillRect(bx, y + 7, 16, 12); x.fillStyle = '#7a3a22'; x.fillRect(bx + 1, y + 8, 14, 10); x.fillStyle = '#e8c050'; x.fillRect(bx + 2, y + 13, 12, 4); x.fillStyle = '#ffffff'; x.fillRect(bx + 6, y + 11, 4, 4); } }   // nesting boxes with eggs
         else { const c = ['#e83a4a','#3ddc84','#4d9de0','#ffd23f']; for (let bx = x0 + 8, i = 0; bx < x1 - 10; bx += 16, i++){ x.fillStyle = c[i % 4]; x.fillRect(bx, y - 8, 8, 8); x.fillStyle = '#ffffff'; x.fillRect(bx + 3, y - 8, 2, 8); } } }
-      else if (d.k === 'loft'){ const y = d.y*TS; x.fillStyle = 'rgba(26,16,48,.35)'; x.fillRect(x0, y + 6, x1 - x0, 3); if (!ws){ x.fillStyle = '#e8c050'; for (let bx = x0 + 6; bx < x1 - 6; bx += 10) x.fillRect(bx, y - 3, 6, 3); } }
+      else if (d.k === 'loft'){ const y = d.y*TS; x.fillStyle = 'rgba(26,16,48,.35)'; x.fillRect(x0, y + 6, x1 - x0, 3); if (ar){ for (let bx = x0 + 8, i = 0; bx < x1 - 12; bx += 28, i++) drawHelm(x, bx, y, i + 1); } else if (!ws){ x.fillStyle = '#e8c050'; for (let bx = x0 + 6; bx < x1 - 6; bx += 10) x.fillRect(bx, y - 3, 6, 3); } }
       else if (d.k === 'chute'){ const cx = Math.round(d.x*TS - cam); if (cx < -30 || cx > W + 30) continue;
         x.fillStyle = k; x.fillRect(cx - 9, 0, 18, d.y1); x.fillStyle = ws ? '#ffffff' : '#8a5a2a'; x.fillRect(cx - 8, 0, 16, d.y1 - 1); if (ws){ x.fillStyle = '#e83a4a'; for (let y = 0; y < d.y1; y += 6) x.fillRect(cx - 8, y, 16, 3); }
         x.fillStyle = k; x.fillRect(cx - 10, d.y1 - 3, 20, 4);
@@ -1562,6 +1829,7 @@ function indoorLight(x, cam){ const L = G.th.indoor, k = '#1e0e06';
   x.globalCompositeOperation = 'lighter'; for (const d of G.base.deco){ if (d.k !== 'lantern') continue; const lx = Math.round(d.x*TS + 8 - cam), ly = d.len + 6; if (lx < -60 || lx > W + 60) continue;
     for (const [r, a] of [[46, .05], [30, .07], [16, .09]]){ x.globalAlpha = a; x.fillStyle = L.glow; for (let i = -r; i <= r; i += 2){ const hw = Math.round(Math.sqrt(r*r - i*i)); x.fillRect(lx - hw, ly + i, hw*2, 2); } } }
   x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
+  if (G.base.indoor === 'armory'){ x.fillStyle = '#1a1424'; x.fillRect(0, 0, W, 6); for (let bx = -((Math.round(cam) % 64) + 64) % 64; bx < W; bx += 64){ x.fillRect(bx, 0, 12, 10); x.fillStyle = '#4a4458'; x.fillRect(bx + 1, 0, 10, 1); x.fillRect(bx + 2, 8, 8, 1); x.fillStyle = '#1a1424'; } return; }   // stone vault ribs
   x.fillStyle = k; x.fillRect(0, 0, W, 6); for (let bx = -((Math.round(cam) % 64) + 64) % 64; bx < W; bx += 64){ x.fillRect(bx, 0, 10, 12); x.fillStyle = '#4e2c14'; x.fillRect(bx + 1, 0, 2, 11); x.fillStyle = k; }   // roof beams
   if (G.base.indoor === 'workshop'){ for (let i = 0; i < W; i += 4){ const y = 7 + Math.round(Math.abs(Math.sin((i + cam)/40))*3); x.fillStyle = '#237a34'; x.fillRect(i, y, 4, 3); } } }
 function alertBubble(x, cx, by, left){ // the hedgehog's warning: a white "!" bubble that blinks faster just before the throw
@@ -1596,6 +1864,10 @@ function weather(x, cam){
   else if (fx === 'feathers'){ for (let i = 0; i < 9; i++){ const sx = ((i*89 + Math.sin(G.t*1.1 + i)*14 - cam*.45) % W + W) % W, sy = (i*53 + G.t*(7 + i % 3*2)) % H, tilt = Math.sin(G.t*1.6 + i) > 0;   // drifting feathers
     x.fillStyle = 'rgba(255,250,240,.85)'; x.fillRect(Math.round(sx), Math.round(sy), 3, 1); x.fillRect(Math.round(sx) + (tilt ? 1 : 0), Math.round(sy) + 1, 2, 1); x.fillStyle = 'rgba(200,190,170,.8)'; x.fillRect(Math.round(sx) + (tilt ? 3 : -1), Math.round(sy), 1, 1); } }
   else if (fx === 'sparkle'){ for (let i = 0; i < 10; i++){ if (Math.sin(G.t*2.4 + i*1.9) > .8){ x.fillStyle = '#ffffff'; const sx = ((i*83 - cam*.3) % W + W) % W, sy = 20 + (i*29) % 120; x.fillRect(Math.round(sx), sy, 1, 3); x.fillRect(Math.round(sx) - 1, sy + 1, 3, 1); } } }
+  else if (fx === 'fireflies'){ for (let i = 0; i < 10; i++){ if (Math.sin(G.t*2.2 + i*1.7) < -.2) continue; const sx = Math.round((((i*71 + Math.sin(G.t*.8 + i*2)*18 - cam*.35) % W) + W) % W), sy = Math.round(104 + (i*29) % 80 + Math.sin(G.t*1.3 + i)*6);
+    x.fillStyle = 'rgba(200,255,120,.25)'; x.fillRect(sx - 1, sy - 1, 4, 4); x.fillStyle = 'rgba(220,255,140,.95)'; x.fillRect(sx, sy, 2, 2); } }
+  else if (fx === 'embers'){ for (let i = 0; i < 12; i++){ const sx = Math.round((((i*67 + Math.sin(G.t*1.5 + i)*10 - cam*.4) % W) + W) % W), sy = Math.round(H - ((i*53 + G.t*(14 + i % 4*4)) % H));
+    x.fillStyle = i % 3 ? 'rgba(255,160,64,.85)' : 'rgba(255,230,140,.9)'; x.fillRect(sx, sy, 1, 2); } }
   else if (fx === 'dust'){ x.fillStyle = 'rgba(220,200,255,.6)'; for (let i = 0; i < 18; i++){ const sx = ((i*61 + Math.sin(G.t + i)*20 - cam*.3) % W + W) % W, sy = (i*47 + G.t*6*(i%3 + 1)) % H; x.fillRect(Math.round(sx), Math.round(H - sy), 1, 1); } }
 }
 function hud(x){
@@ -1706,7 +1978,7 @@ function drawOverworld(canvas, worlds, opts = {}){
   return hits;
 }
 
-window.PQGame = { SPECIAL, SHIP, audio:{ ctx:() => ac(), want:wantAudio, status:audioStatus, test:testSound, reset:resetAudio, onChange(f){ AUD.listeners.add(f); return () => AUD.listeners.delete(f); } },
+window.PQGame = { SPECIAL, SHIP, MOAT, SKEL, BUBBLE, ARMOR, audio:{ ctx:() => ac(), want:wantAudio, status:audioStatus, test:testSound, reset:resetAudio, onChange(f){ AUD.listeners.add(f); return () => AUD.listeners.delete(f); } },
   finale:{ start:on => Finale.start(on), stop:() => Finale.stop(), get playing(){ return !!Finale.timer; } }, start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
   debug:{ get G(){ return G; }, get audio(){ return AC; }, get music(){ return { playing:!!Music.timer, wiz:!!(Music.song && Music.song.wiz), step:Music.step }; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); }, draw(){ if (G) draw(); } } };
 })();
