@@ -1390,6 +1390,7 @@ function draw(){
   if (G.base.auto){ drawSea(x, cam); drawPushHint(x, cam); }
   if (G.base.port) drawHarborWater(x, cam);
   if (G.base.indoor) indoorLight(x, cam);
+  if (G.base.indoor === 'coop') drawHenBubbles(x, cam);
   weather(x, cam); x.restore();
   hud(x);
 }
@@ -1504,12 +1505,21 @@ function landMarker(x, m, cam, k){ const mx = Math.round(m.x - cam), my = m.y, h
 // ---------- special stage drawing (barn, workshop, coop, sky) ----------
 // a harmless coop hen: wanders back and forth on a floor stretch, pecks, and now and then clucks (scenery only, never hurts)
 function henAt(d, t){ const span = Math.max(8, (d.x1 - d.x0)*TS - 12), u = (Math.sin(t*d.sp + d.ph) + 1)/2; return { x:d.x0*TS + 6 + u*span, face:Math.cos(t*d.sp + d.ph) >= 0 ? 1 : -1, peck:Math.sin(t*5 + d.ph*3) > .6 }; }
-function drawHen(x, hx, fy, face, peck, cluck){ const k = '#1a1030', bx = Math.round(hx) - 6, by = fy - 11, f = face > 0;
+function drawHen(x, hx, fy, face, peck){ const k = '#1a1030', bx = Math.round(hx) - 6, by = fy - 11, f = face > 0;
   const px = (dx, dy, w, h, c) => { x.fillStyle = c; x.fillRect(f ? bx + dx : bx + 12 - dx - w, by + dy, w, h); };
   px(1, 3, 9, 7, k); px(2, 4, 7, 5, '#fff6e8'); px(0, 2, 3, 4, k); px(1, 3, 2, 3, '#fff6e8'); px(3, 6, 4, 2, '#e8dcc8');   // body + tail
   const hy = peck ? 4 : 0; px(8, hy, 4, 5, k); px(9, hy + 1, 2, 3, '#fff6e8'); px(9, hy - 1, 2, 1, '#e83a4a'); px(12, hy + 2, 1, 1, '#ffb030'); px(10, hy + 1, 1, 1, k); px(9, hy + 4, 1, 1, '#e83a4a');   // head, comb, beak
   px(4, 10, 1, 1, '#ffb030'); px(7, 10, 1, 1, '#ffb030');
-  if (cluck){ const tx = Math.round(hx) - 10; x.fillStyle = 'rgba(255,255,255,.9)'; x.fillRect(tx, by - 10, 20, 7); x.fillStyle = k; for (const [a, l] of [[2,2],[6,2],[10,2],[14,3]]) x.fillRect(tx + a, by - 8, l, 3); } }
+}
+const BAWK = { text:'BAWK!', show:1.1 };   // a hen's cluck shows a readable speech bubble (drawn on top of everything, after the warm coop light)
+function drawHenBubbles(x, cam){ const t = G.t, k = '#1a1030';
+  for (const d of G.base.deco){ if (d.k !== 'hen' || d.cl == null || t < d.cl || t - d.cl > BAWK.show) continue;
+    const a = t - d.cl, hx = Math.round(henAt(d, t).x - cam), tw = SP.textWidth(BAWK.text), bw = tw + 8, bh = 13, pop = a < .12 ? Math.round((.12 - a)*25) : 0;
+    const bx = Math.max(2, Math.min(W - bw - 2, hx - Math.round(bw/2))), by = 12*TS - 41 + pop, tip = Math.max(bx + 4, Math.min(bx + bw - 6, hx - 1));
+    if (hx < -30 || hx > W + 30 || (a > BAWK.show - .25 && Math.floor(a*20) % 2)) continue;
+    x.fillStyle = k; x.fillRect(bx + 1, by, bw - 2, bh); x.fillRect(bx, by + 1, bw, bh - 2); x.fillRect(tip - 1, by + bh - 1, 5, 2); x.fillRect(tip, by + bh + 1, 3, 2); x.fillRect(tip + 1, by + bh + 3, 1, 2);   // outline + tail pointing at the hen
+    x.fillStyle = '#ffffff'; x.fillRect(bx + 2, by + 1, bw - 4, bh - 2); x.fillRect(bx + 1, by + 2, bw - 2, bh - 4); x.fillRect(tip, by + bh - 1, 3, 2); x.fillRect(tip + 1, by + bh + 1, 1, 2);
+    SP.text(x, BAWK.text, bx + 4, by + 3, k, null); } }
 function islandUnder(x, tx, ty, cam){ const h = hash(tx + 'u') % 3, bx = tx*TS - cam, by = (ty + 1)*TS;
   x.fillStyle = '#5a3416'; x.fillRect(bx, by, TS, 3); x.fillRect(bx + 2 + h, by + 3, 12 - h*2, 4); x.fillRect(bx + 5, by + 7, 6 - h, 3 + h);
   x.fillStyle = '#8a5a2a'; x.fillRect(bx + 1, by, TS - 2, 2); x.fillRect(bx + 3 + h, by + 3, 10 - h*2, 3); x.fillStyle = '#2f8a2f'; if (h === 1) x.fillRect(bx + 12, by + 2, 1, 6); }
@@ -1528,7 +1538,7 @@ function drawSpecialDeco(x, cam){ const t = G.t, ws = G.base.indoor === 'worksho
       if (d.k === 'nests'){ const fy = 12*TS; for (let px = x0 + 4, i = 0; px < x1 - 18; px += 22, i++){ x.fillStyle = k; x.fillRect(px, fy - 20, 20, 20); x.fillStyle = '#a8703c'; x.fillRect(px + 1, fy - 19, 18, 18);   // nesting boxes on the floor
           x.fillStyle = '#2a1608'; x.fillRect(px + 3, fy - 16, 14, 11); x.fillStyle = '#e8c050'; x.fillRect(px + 3, fy - 9, 14, 4);
           if (i % 2){ drawHen(x, px + 10, fy - 6, 1, false, false); } else { x.fillStyle = '#fff6e8'; x.fillRect(px + 6, fy - 11, 4, 5); x.fillStyle = '#e0b080'; x.fillRect(px + 11, fy - 10, 4, 4); } } }
-      else if (d.k === 'hen'){ const h = henAt(d, t), sx = h.x - cam; if (sx < -20 || sx > W + 20) continue; drawHen(x, sx, 12*TS, h.face, h.peck, Math.sin(t*1.3 + d.ph*2) > .93 || (d.cl != null && t - d.cl < .9 && t >= d.cl)); }
+      else if (d.k === 'hen'){ const h = henAt(d, t), sx = h.x - cam; if (sx < -20 || sx > W + 20) continue; drawHen(x, sx, 12*TS, h.face, h.peck); }
       else if (d.k === 'feeder'){ const cx = Math.round(d.x*TS - cam); if (cx < -30 || cx > W + 30) continue;   // hanging grain feeder over a gap, grain trickling down
         x.fillStyle = '#1a1030'; x.fillRect(cx, 0, 1, d.y1 - 18); x.fillRect(cx - 9, d.y1 - 18, 18, 16); x.fillStyle = '#b8bcc8'; x.fillRect(cx - 8, d.y1 - 17, 16, 14); x.fillStyle = '#e0e4ec'; x.fillRect(cx - 6, d.y1 - 17, 3, 14);
         x.fillStyle = '#1a1030'; x.fillRect(cx - 12, d.y1 - 3, 24, 4); x.fillStyle = '#9aa0b4'; x.fillRect(cx - 11, d.y1 - 2, 22, 2);
