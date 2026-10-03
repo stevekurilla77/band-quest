@@ -67,14 +67,14 @@ function credits(canvas, cast, opts = {}){
     const a = lt < TITLE ? lt/TITLE : lt > SEG - OUT ? Math.max(0, (SEG - lt)/OUT) : 1; x.globalAlpha = a; center(x, g.title, 26, '#ffd23f', 2); x.globalAlpha = 1;
     const cols = g.cols || Math.min(4, g.list.length), rows = Math.ceil(g.list.length/cols), cw = W/cols, maxc = Math.max(5, Math.floor((cw - 4)/6));
     g.list.forEach((c, i) => { const row = Math.floor(i/cols), inRow = Math.min(cols, g.list.length - row*cols), col = i % cols;
-      const tx = Math.round((W - inRow*cw)/2 + col*cw + cw/2), base = rows === 1 ? 128 : 92 + row*76, delay = TITLE*.6 + i*.12;
+      const tx = Math.round((W - inRow*cw)/2 + col*cw + cw/2), base = rows === 1 ? 128 : rows === 2 ? 92 + row*76 : 66 + row*62, delay = TITLE*.6 + i*.12;
       let px = tx; const li = lt - delay;
       if (li < IN) px = Math.round(W + 40 + (tx - W - 40)*Math.max(0, li)/IN);
       else if (lt > SEG - OUT) px = Math.round(tx - (lt - (SEG - OUT))/OUT*(tx + 60));
       if (li < 0) return; const img = imgFor(c, G.t), sc = c.big || c.kind === 'wizard' || c.kind === 'drum' ? 2 : 1, w = img.width*sc, h = img.height*sc;
       const hop = Math.round(Math.abs(Math.sin((G.t + i*.11)*Math.PI/BEAT))*(sc > 1 ? 6 : 5));
       x.drawImage(img, Math.round(px - w/2), base - h - hop, w, h);
-      if (li > IN && lt < SEG - OUT){ G.shown.add(c.name); const lines = wrap(c.name, maxc); lines.forEach((ln, j) => SP.text(x, ln, Math.round(px - SP.textWidth(ln)/2), base + 5 + j*9, j ? '#c9b6ff' : '#ffffff'));
+      if (li > IN && lt < SEG - OUT){ if (base + 14 <= H) G.shown.add(c.name); const lines = wrap(c.name, maxc); lines.forEach((ln, j) => SP.text(x, ln, Math.round(px - SP.textWidth(ln)/2), base + 5 + j*9, j ? '#c9b6ff' : '#ffffff'));
         if (Math.random() < .015) G.hearts.push({ x:px + (Math.random() - .5)*20, y:base - h - 6, t:0, c:Math.random() < .5 ? 'heart' : 'note' }); } });
   };
   const draw = () => { const t = G.t; x.drawImage(starry(), 0, 0);

@@ -190,6 +190,13 @@ const MIX = {
     ["..................", "...........kk.....", "..........kWWk....", ".........krkk.....", "........krrk......", ".......krrrk......", "...kkkkWWWWkkkk...", "..kwwwwkkkkwwwwk..", ".kwkkwwwkkwkkwwwk.", ".kwkkwwwggwkkwwwk.", ".kgwwwwggggwwwwgk.", ".kggggggggggggggk.", ".kgcggggggggggcgk.", ".kgkggggggggggkgk.", "..kgkkkkkkkkkkgk..", "..kggttttttttggk..", ".kGGgttttttttgGGk.", "..kkkkkkkkkkkkkk.."],
     ["...........kk.....", "kk........kWWk..kk", "kgk......krkk..kgk", "kgk.....krrk...kgk", "kgk....krrrk...kgk", "kgkkkkkWWWWkkkkkgk", "kgkwwwwkkkkwwwwkgk", "kgwkkwwwkkwkkwwwgk", "kgwkkwwwggwkkwwwgk", ".kgwwwwggggwwwwgk.", ".kggggggggggggggk.", ".kgcggggggggggcgk.", ".kgkggggggggggkgk.", "..kgkkkkkkkkkkgk..", "..kggttttttttggk..", ".kgGgttttttttgGgk.", ".kGGgttttttttgGGk.", "..kkkkkkkkkkkkkk.."],
     ["...........kk.....", "..........kWWk....", ".........krkk.....", "........krrk......", ".......krrrk......", "...kkkkWWWWkkkk...", "..kwwwwkkkkwwwwk..", ".kwkkwwwkkwkkwwwk.", ".kwkkwwwggwkkwwwk.", "kkgwwwwggggwwwwgk.", "kgggggggggggggggk.", "kggcggggggggggcgk.", "kkgkggggggggggkgk.", "..kgkkkkkkkkkkgk..", "..kggttttttttggk..", ".kgGgttttttttgGgk.", ".kGGgttttttttgGGk.", "..kkkkkkkkkkkkkk.."]] },
+  // Comet the Antler-Tosser (World 3-3 Reindeer Harbor): a red-nosed reindeer in a red scarf with a gold bell who throws his antlers
+  // like a boomerang. Frames: 0-1 idle, 2 = wind-up (head down, antlers glowing gold), 3 = antlers out (just little nubs). The antlers sit above the 14x14 hitbox.
+  reindeer: { pal:{ A:'#ecd6a4', W:'#ffffff', t:'#f3e2c4' }, f:[
+    [".k...k............", "kAk.kAk...........", "kAAkAAk.k.........", ".kAAAk.kAk........", "..kAAAkAAk........", "...kAAAAk.........", "...knnnnk.kk......", "..knnnnnnknnk.....", ".knnWknnnkkk......", "krnnnnnnnkkkkkkk..", "krrnnnnnnnnnnnnnkk", ".kknnnRRRnnnnnnnnk", "...knnRyRnnnnnnnnk", "...knntttnnnnnnnk.", "....kntttnnnnnnnk.", "....knnnnnnnnnnk..", "....kNk.kNk.kNk...", "....kkk.kkk.kkk..."],
+    [".k...k............", "kAk.kAk...........", "kAAkAAk.k.........", ".kAAAk.kAk........", "..kAAAkAAk........", "...kAAAAk.........", "...knnnnk.kk......", "..knnnnnnknnk.....", ".knnWknnnkkk......", "krnnnnnnnkkkkkkk..", "krrnnnnnnnnnnnnnkk", ".kknnnRRRnnnnnnnnk", "...knnRyRnnnnnnnnk", "...knntttnnnnnnnk.", "....kntttnnnnnnnk.", "....knnnnnnnnnnk..", ".....kNk.kNk.kNk..", ".....kkk.kkk.kkk.."],
+    ["..................", ".k...k............", "kyk.kyk...........", "kyykyyk.k.........", ".kyyyk.kyk........", "..kyyykyyk........", "...kyyyyk.........", "...knnnnk.kk......", "..knnnnnnknnk.....", ".knnWknnnkkk......", "krrnnnnnnnnnnnnnkk", ".kknnnRRRnnnnnnnnk", "...knnRyRnnnnnnnnk", "...knntttnnnnnnnk.", "....kntttnnnnnnnk.", "....knnnnnnnnnnk..", "....kNk.kNk.kNk...", "....kkk.kkk.kkk..."],
+    ["..................", "..................", "..................", "..................", "..................", "...kNkNk..........", "...knnnnk.kk......", "..knnnnnnknnk.....", ".knnWknnnkkk......", "krnnnnnnnkkkkkkk..", "krrnnnnnnnnnnnnnkk", ".kknnnRRRnnnnnnnnk", "...knnRyRnnnnnnnnk", "...knntttnnnnnnnk.", "....kntttnnnnnnnk.", "....knnnnnnnnnnk..", "....kNk.kNk.kNk...", "....kkk.kkk.kkk..."]] },
 };
 // bosses: left halves (16 wide), mirrored to 32 wide
 const BOSS = {
@@ -233,6 +240,7 @@ const ITEMS = {
   coin: ["....kk", "....kyk", "....kyyk", "....kykyk", "....kyk.yk", "....kyk..k", "....kyk", "..kkkyk", ".kyyyyk", "kyyyyyk", "kyyyyk", ".kkkk"],
   piano: ["..kkkkkkkkkkkk..", ".knnnnnnnnnnnnk.", ".knNNNNNNNNNNnk.", ".knnnnnnnnnnnnk.", "kkkkkkkkkkkkkkkk", "kwkwkwwkwkwkwwkk", "kwwwwwwwwwwwwwwk",
     "kkkkkkkkkkkkkkkk", ".knnnnnnnnnnnnk.", ".knNnnnnnnnnNnk.", ".knnnnnnnnnnnnk.", ".kNk........kNk.", ".kk..........kk."],   // Froppy's little upright piano
+  antler: [".k...k...k..", "kAk.kAk.kAk.", "kAk.kAk.kAk.", ".kAkkAkkAk..", "..kAAAAAAAk.", "...kAAAAAAAk", "....kkkkkkk."],   // Comet's thrown antlers
   heart: [".kk.kk.", "krrkrrk", "krrrrrk", "krrrrrk", ".krrrk.", "..krk..", "...k..."],
   bolt: ["...kkk", "..kyyk", ".kyyk", "kyyyykk", "kkkyyyk", "..kyyk", ".kyk", ".kk"],
   plume: ["..rr", ".rrrr", "rrrrr", ".rrr", "..yy", "..yy"],
