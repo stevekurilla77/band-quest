@@ -3,7 +3,7 @@
    v19: every app file is fetched past the browser's HTTP cache (GitHub Pages lets browsers reuse files for 10 minutes),
    and index.html loads its CSS/JS with a matching ?v= number, so a phone can never mix old and new JS files after an update.
    When you release: bump CACHE here AND the ?v= numbers in index.html. */
-const CACHE = 'band-quest-v27', V = '?v=27';
+const CACHE = 'band-quest-v28', V = '?v=28';
 const SHELL = ['./','index.html','styles.css' + V,'app.js' + V,'sprites.js' + V,'game.js' + V,'finale.js' + V,'teacher.js','pieces.json','manifest.webmanifest','fonts/LilitaOne-Regular.ttf',
   'icons/icon.svg','icons/icon-192.png','icons/icon-512.png','icons/icon-maskable-512.png','icons/apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache:'reload' })))).then(() => self.skipWaiting())); });

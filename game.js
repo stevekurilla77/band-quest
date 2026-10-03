@@ -1039,7 +1039,14 @@ const BOSS_CFG = {
   // World 4's Déjà Vu Dragon (v23): was 24 HP, an untelegraphed fireball every 1.3 s at 140 px/s (3 at once when angry), hovering out of reach.
   // Now just a bit tougher than the Valkyrie: 20 HP, every attack has a 0.8 s flashing "!" wind-up, slower fireballs (100 px/s, 2 when angry),
   // and every 2nd attack he slams down to the floor (red marker first) and sits dizzy for 1.3 s — touching him then is safe, so stomp away.
-  dragon:{ move:'hover', shot:'fire', hp:20, rage:1.15, patrol:32, gap:1.9, windup:.8, fireSpeed:100, spread:[-.2, .2], slamEvery:2, slam:110, rest:1.3, hearts:[2/3, 1/3] }, spectro:{ move:'dance', shot:'orb' }, golem:{ move:'walk', shot:'rock' },
+  dragon:{ move:'hover', shot:'fire', hp:20, rage:1.15, patrol:32, gap:1.9, windup:.8, fireSpeed:100, spread:[-.2, .2], slamEvery:2, slam:110, rest:1.3, hearts:[2/3, 1/3] }, golem:{ move:'walk', shot:'rock' },
+  // World 5's Señor Spectro (v28): was 24 HP, an untelegraphed ring of 5 orbs every 1.8 s at 90 px/s (8 orbs every 1.33 s when angry, rings overlapping),
+  // a faster dance when angry, and a 0.8 s see-through phase every 4 s where notes/stomps passed through him but touching him still hurt.
+  // Now in the Valkyrie/Dragon spirit: 18 HP, a 0.9 s flashing "!" pose before every attack, slower orbs (60 px/s) in a ring with a safe gap aimed at you
+  // (4 orbs, 6 when angry), only one ring on screen at a time, a slower dance, and every 2nd attack a "tango dip" down to the floor (red marker first)
+  // followed by a 1.6 s dizzy rest + slow float back up (touching him then is safe — stomp away). He fades only once every 8 s, flickers 0.6 s before,
+  // stays half-visible on the same dance path (no teleport), and touching him while faded doesn't hurt. Two heart drops (2/3 and 1/3 HP).
+  spectro:{ move:'dance', shot:'orb', hp:18, rage:1.1, sway:.65, gap:2.4, windup:.9, orbN:4, orbNAngry:6, orbSpeed:60, orbLife:4.5, dipEvery:2, dip:100, rest:1.6, rise:45, fadeEvery:8, fadeWarn:.6, fade:.8, hearts:[2/3, 1/3] },
   kurilla:{ move:'wizard', shot:'note' },   /* the final boss (see updateWizard) */
 };
 function newRun(opts){
@@ -1426,7 +1433,9 @@ function updateBoss(dt){
     if (k === 'egg') for (const s of [-1, 1]) G.eshots.push({ kind:k, x:cx, y:B.y + B.h - 6, vx:s*(70 + Math.random()*60), vy:-260, grav:700, t:0 });
     if (k === 'axe') G.eshots.push({ kind:k, x:cx, y:cy - 8, vx:toward*(110 + Math.abs(dx)*.25), vy:-300, grav:700, t:0 });
     if (k === 'fire'){ const v = B.cfg.fireSpeed || 140; for (const a of (hpF < .5 ? (B.cfg.spread || [-.25, 0, .25]) : [0])) G.eshots.push({ kind:k, x:cx, y:cy, vx:Math.cos(Math.atan2(dy, dx) + a)*v, vy:Math.sin(Math.atan2(dy, dx) + a)*v, t:0 }); }
-    if (k === 'orb'){ const n = hpF < .5 ? 8 : 5; for (let i = 0; i < n; i++){ const a = i/n*Math.PI*2 + B.t; G.eshots.push({ kind:k, x:cx, y:cy, vx:Math.cos(a)*90, vy:Math.sin(a)*90, t:0 }); } }
+    if (k === 'orb'){ const C = B.cfg, n = hpF < .5 ? (C.orbNAngry || 8) : (C.orbN || 5), v = C.orbSpeed || 90;
+      const a0 = C.orbN ? Math.atan2(dy, dx) + Math.PI/n : B.t;   /* v28: the hero always sits in the middle of a gap between two orbs */
+      for (let i = 0; i < n; i++){ const a = i/n*Math.PI*2 + a0; G.eshots.push({ kind:k, x:cx, y:cy, vx:Math.cos(a)*v, vy:Math.sin(a)*v, t:0, life:C.orbLife }); } }
     if (k === 'rock') for (let i = 0; i < 3; i++) G.eshots.push({ kind:k, x:left + Math.random()*(right - left + B.w), y:-10 - i*30, vx:0, vy:40, grav:420, t:0 });
   };
   if (B.state === 'intro'){ if (B.timer <= 0){ B.state = 'fight'; B.timer = 1.2; } }
@@ -1451,8 +1460,7 @@ function updateBoss(dt){
         if (B.timer <= 0){ if (C.windup){ B.n = (B.n || 0) + 1; B.next = C.slamEvery && B.n % C.slamEvery === 0 ? 'slam' : 'fire'; B.mode = 'warn'; B.warnT = C.windup; if (B.next === 'slam') B.tx = B.x; sfx('windup'); }
           else throwShot(); B.timer = (C.gap || 1.3)/fast; } }
       break; }
-    case 'dance': { const cx = 7.5*TS - B.w/2; B.x = cx + Math.sin(B.t*.9*fast)*80; B.y = 98 + Math.sin(B.t*1.8*fast)*24;
-      B.ghost = (B.t % 4) > 3.2; if (B.timer <= 0){ throwShot(); B.timer = 1.8/fast; } break; }
+    case 'dance': updateDance(B, dt, p, left, right, floor, fast, throwShot); break;
     case 'wizard': updateWizard(B, dt, p, left, right, floor, hpF); break;
     case 'hop': case 'walk': {
       B.vy = Math.min(500, B.vy + 900*dt); const wasAir = !B.onGround;
@@ -1468,10 +1476,27 @@ function updateBoss(dt){
   B.face = toward;
   const hb = { x:B.x + 2, y:B.y + 2, w:B.w - 4, h:B.h - 2 };
   if (B.state !== 'intro' && !B.ghost) for (const s of G.shots) if (!s.dead && overlap({ x:s.x, y:s.y, w:6, h:6 }, hb)){ s.dead = 1; damageBoss(1); }
-  const harmless = (B.cfg.move === 'wizard' && (B.ghost || B.mode === 'rest' || B.mode === 'drop')) || (B.mode === 'rest' && !!B.cfg.rest);   /* a fading or dizzy wizard never hurts on touch */
+  const harmless = (B.cfg.move === 'wizard' && (B.ghost || B.mode === 'rest' || B.mode === 'drop')) || (B.mode === 'rest' && !!B.cfg.rest) || (B.cfg.move === 'dance' && !!B.cfg.windup && (B.ghost || B.mode === 'rise'));   /* a fading or dizzy wizard never hurts on touch */
   if (!p.dead && B.state !== 'intro' && overlap(p, hb)){
     if (p.vy > 30 && p.y + p.h - hb.y < 16 && !B.ghost){ p.vy = -330; damageBoss(3); if (B.cfg.move === 'walk'){ B.inv = 1; B.charge = .9; } if (B.cfg.move === 'wizard' && B.hp > 0){ B.mode = 'out'; B.timer = .5; } } else if (!harmless) hurt('boss'); }
 }
+// Señor Spectro (World 5). Modes: '' = dancing, 'warn' = "!" pose (nothing moves), 'dip' = tango dip down to the marked spot,
+// 'rest' = dizzy on the floor (harmless), 'rise' = floats back up (harmless). Fading only happens while dancing.
+function updateDance(B, dt, p, left, right, floor, fast, throwShot){ const C = B.cfg, cx = 7.5*TS - B.w/2;
+  if (!C.windup){ B.x = cx + Math.sin(B.t*.9*fast)*80; B.y = 98 + Math.sin(B.t*1.8*fast)*24; B.ghost = (B.t % 4) > 3.2; if (B.timer <= 0){ throwShot(); B.timer = 1.8/fast; } return; }   // (old tuning)
+  B.ghost = false; B.preFade = false;
+  if (B.mode === 'warn'){ B.warnT -= dt; if (B.warnT <= 0){ if (B.next === 'dip'){ B.mode = 'dip'; sfx('bump'); } else { throwShot(); B.mode = ''; B.timer = C.gap/fast; } } return; }
+  if (B.mode === 'dip'){ B.y += (C.dip || 100)*dt; if (B.y >= floor){ B.y = floor; G.shake = .15; sfx('bump'); puff(B.x + B.w/2, floor + B.h, '#9b5de5', 8, 70); B.mode = 'rest'; B.restT = C.rest; B.tx = undefined; } return; }
+  if (B.mode === 'rest'){ B.y = floor; B.restT -= dt; if (B.restT <= 0) B.mode = 'rise'; return; }
+  const ph = B.ph = (B.ph || 0) + (B.mode === 'rise' ? 0 : dt*(C.sway || 1)*fast), tx = cx + Math.sin(ph*.9)*80, ty = 98 + Math.sin(ph*1.8)*24;
+  if (B.mode === 'rise'){ B.y = Math.max(ty, B.y - (C.rise || 45)*dt); B.x += clamp(tx - B.x, -30*dt, 30*dt); if (B.y <= ty + .5 && Math.abs(tx - B.x) < 2){ B.mode = ''; B.timer = Math.max(B.timer, C.gap*.6/fast); } return; }
+  B.x += (tx - B.x)*Math.min(1, dt*4); B.y += (ty - B.y)*Math.min(1, dt*4);
+  B.fadeT = (B.fadeT || 0) + dt; const fe = C.fadeEvery || 8, f0 = fe - (C.fade || .8);
+  if (B.fadeT >= fe) B.fadeT = 0; else if (B.fadeT >= f0) B.ghost = true; else if (B.fadeT >= f0 - (C.fadeWarn || .6)) B.preFade = true;
+  // attack only when visible, not about to fade, and the last ring of orbs is gone
+  if (B.timer <= 0 && !B.ghost && !B.preFade && B.fadeT < f0 - (C.fadeWarn || .6) - C.windup && !G.eshots.some(s => s.kind === 'orb')){
+    B.n = (B.n || 0) + 1; B.next = C.dipEvery && B.n % C.dipEvery === 0 ? 'dip' : 'orb'; B.mode = 'warn'; B.warnT = C.windup;
+    if (B.next === 'dip'){ B.x = clamp(B.x, left, right); B.tx = B.x; } else B.tx = undefined; sfx('windup'); } }
 // boss safety net (all bosses): never NaN, never above the top of the screen or under the floor, never outside the arena walls,
 // and if it is somehow out of the camera view for more than 2 s it is put back in the middle of the arena.
 const BOSS_HOME_Y = { fly:36, hover:96, dance:98, wizard:44 };
@@ -1542,7 +1567,7 @@ function draw(){
   if (G.marks.length) drawMarks(x, cam);
   if (G.B && G.B.key === 'kurilla' && (!G.B.gone || G.B.gone > 1)) drawWizardBoss(x, G.B, cam);
   else if (G.B && (!G.B.gone || G.B.gone > 1)){ const B = G.B, f = SP.bossFrames(B.key); const img = B.inv > 0 && Math.floor(G.t*30) % 2 ? f.hit : (B.face > 0 ? f.r : f.l);
-    x.globalAlpha = B.ghost ? .35 + Math.sin(G.t*30)*.15 : 1; const bob = B.cfg.move === 'fly' || B.cfg.move === 'hover' || B.cfg.move === 'dance' ? Math.round(Math.sin(G.t*6)*2) : 0;
+    x.globalAlpha = B.ghost ? (B.cfg.windup && B.cfg.move === 'dance' ? .5 + Math.sin(G.t*20)*.08 : .35 + Math.sin(G.t*30)*.15) : B.preFade && Math.floor(G.t*14) % 2 ? .7 : 1;   /* Spectro: stays half-visible, flickers before fading */ const bob = B.cfg.move === 'fly' || B.cfg.move === 'hover' || B.cfg.move === 'dance' ? Math.round(Math.sin(G.t*6)*2) : 0;
     const warn = B.mode === 'warn', flash = warn && Math.floor(G.t*(B.warnT < .3 ? 24 : 12)) % 2;
     x.drawImage(flash ? f.hit : img, Math.round(B.x - cam - 2), Math.round(B.y - 4 + bob)); x.globalAlpha = 1;
     if (warn){ alertBubble(x, Math.round(B.x - cam + B.w/2), Math.round(B.y - 6 + bob), B.warnT);                       // dive telegraph: "!" + where she'll land
