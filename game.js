@@ -14,9 +14,9 @@ const ENEMY_KIND = {
   meep:    { w:12, h:14, hop:true, speed:40 },        // Meep the green alien: hops back and forth
   dragon:  { w:14, h:12, wave:true, speed:34 },       // Burney the little dragon: flies in a wave
   hedgehog:{ w:14, h:10, archer:true, speed:8 },      // hedgehog archer: shuffles, winds up, throws a slow toy arrow
-  frog:    { w:14, h:13, thrower:true, speed:0 },     // Plunky the Frog (World 3 workshop): winds up with a piano over his head, then lobs it
+  frog:    { w:14, h:13, thrower:true, speed:0 },     // Froppy (World 3 workshop): winds up with a piano over his head, then lobs it
 };
-// Plunky's pianos: wind-up 0.9 s ("!" + the piano lifted + a blinking shadow where it will land), a slow 1.25 s arc, one piano at a time,
+// Froppy's pianos: wind-up 0.9 s ("!" + the piano lifted + a blinking shadow where it will land), a slow 1.25 s arc, one piano at a time,
 // a long cooldown, only while he's on screen and the hero isn't right next to him. Notes pop a piano, a stomp bounces off it, a bass bomb smashes it.
 const PIANO = { range:176, min:36, rise:90, wind:.9, flight:1.25, grav:480, cool:3.4, first:1.4 };
 // vanishing clouds (World 4-2 sky): they shake for 0.8 s after you step on them, vanish, and come back 2.6 s later
@@ -380,7 +380,7 @@ function genBoss(){
 }
 
 // ---------- special stages (stage index 0-2 per world; ids, saves and unlocks are unchanged) ----------
-//   World 2-2 = inside the barn, World 3-2 = Santa's toy workshop (with Plunky the piano-throwing frog), World 4-2 = sky level, World 4-3 = pirate ship
+//   World 2-2 = inside the barn, World 3-2 = Santa's toy workshop (with Froppy the piano-throwing frog), World 4-2 = sky level, World 4-3 = pirate ship
 const SPECIAL = { chickens:{ 1:'barn' }, santa:{ 1:'workshop' }, infinite:{ 1:'sky', 2:'ship' } };
 const SPECIAL_THEME = {
   barn:    { sky:['#1e0e06','#2a1408','#341a0c','#3e2010'], far:'barnwall', near:'barnposts', top:'#b07a40', top2:'#8a5a2a', fill:'#6b3f1f', fill2:'#4e2c14', block:'#e0a040', pillar:'hay', fx:'hay', skin:'barn', indoor:{ dark:'rgba(40,16,2,.24)', glow:'#ffb040' } },
@@ -631,7 +631,7 @@ const SFX = {
   windup:()=>{ blip('triangle', 520, 880, .18, .16); blip('triangle', 880, 880, .06, .12, .2); }, toss:()=>{ noise(.08, .14, 0, 2500); blip('square', 700, 420, .08, .08); },
   spell:()=>[84,88,91,96].forEach((m,i)=>blip('triangle', mtof(m), mtof(m), .09, .14, i*.045)),
   cannon:()=>{ noise(.35, .35, 0, 150); blip('square', 150, 50, .25, .2); }, splash:()=>{ noise(.3, .2, 0, 1200); blip('sine', 600, 180, .22, .12); },
-  // Plunky's piano landing: a comical clunky diminished piano chord + wood crunch + a little "boing"
+  // Froppy's piano landing: a comical clunky diminished piano chord + wood crunch + a little "boing"
   plunk:()=>{ [52, 55, 58, 61].forEach((m, i) => { blip('triangle', mtof(m), mtof(m)*.985, .5, .15, i*.014); blip('square', mtof(m + 12), mtof(m + 12)*.99, .06, .05, i*.014); }); noise(.14, .22, 0, 700); blip('sine', 330, 90, .3, .14, .07); },
   poof:()=>{ noise(.18, .14, 0, 2500); blip('sine', 900, 1400, .12, .1); },
   empty:()=>blip('square', 120, 100, .06, .12), pause:()=>blip('triangle', 880, 880, .08, .2), heart:()=>[76,79,84].forEach((m,i)=>blip('triangle', mtof(m), mtof(m), .1, .25, i*.07)),
@@ -1008,7 +1008,7 @@ function updateArcher(e, dt, p){ // hedgehog: shuffle -> wind-up ("!", quills up
   else if (e.st === 'wind'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'throw'; e.stT = .35; sfx('toss');
       G.eshots.push({ kind:'arrow', x:e.x + e.w/2 + e.face*10, y:e.y + 3, vx:e.face*A.speed, vy:0, t:0, from:e }); } }
   else if (e.st === 'throw'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'idle'; e.cool = A.cool + Math.random()*.6; } } }
-// Plunky the Frog: sits and bobs -> wind-up (lifts a piano, "!" bubble, a blinking shadow where it will land) -> lobs it in a slow arc -> long cooldown
+// Froppy: sits and bobs -> wind-up (lifts a piano, "!" bubble, a blinking shadow where it will land) -> lobs it in a slow arc -> long cooldown
 function updateFrog(e, dt, p){
   const P = PIANO, dx = (p.x + p.w/2) - (e.x + e.w/2), dy = (e.y + e.h) - (p.y + p.h), sx = e.x - G.cam;
   e.vy = Math.min(400, e.vy + 1000*dt); moveY(e, e.vy*dt); if (e.y > H + 40){ e.alive = false; return; }

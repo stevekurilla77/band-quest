@@ -418,7 +418,7 @@ function finaleCast(){
     { title:'STARRING', cols:1, list:[{ kind:'hero', inst, hair, gold:PIECES.some(p => gw(p.id).golden), big:true, name:plain(S.name) || 'You' }] },
     { title:'THE BAND', cols:3, list:Object.keys(INST_NAME).map((k, i) => ({ kind:'hero', inst:k, hair:i % 2 ? 'long' : 'short', name:INST_NAME[k] })) },
     { title:'WORLD BADDIES', cols:3, list:ens.map(k => ({ kind:'enemy', type:k, name:ENEMY_NAME[k] || plain(k) })) },
-    { title:'TROUBLEMAKERS', cols:2, list:[['dino', 'Mr. Dinosaur'], ['meep', 'Meep'], ['dragon', 'Burney'], ['hedgehog', 'Hedgehog Archer'], ['frog', 'Plunky the Frog']].map(([type, name]) => ({ kind:'enemy', type, name })) },
+    { title:'TROUBLEMAKERS', cols:2, list:[['dino', 'Mr. Dinosaur'], ['meep', 'Meep'], ['dragon', 'Burney'], ['hedgehog', 'Hedgehog Archer'], ['frog', 'Froppy']].map(([type, name]) => ({ kind:'enemy', type, name })) },
     { title:'THE BOSSES', cols:3, list:bos.map(k => ({ kind:'boss', type:k, name:bossName(k) })) },
     ...(guests.length ? [{ title:'SPECIAL GUESTS', cols:2, list:guests }] : []),
     { title:'AND THE MAESTRO', cols:2, list:[{ kind:'wizard', name:'Mr. Kurilla' }, { kind:'drum', name:'The Golden Snare' }] },

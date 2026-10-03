@@ -183,7 +183,7 @@ const MIX = {
 "......k.k.k.k...", ".....knknknknk..", "....knNnNnNnNnk.", "...kttkNnNnNnNnk", "..kttktkNnNnNnNk", "kkktttttkNnNnNnk",
 "ttkkctttttkNnNnk", ".kttttttttkNnNk.", "..kkttttttkkkk..", "...kk.kk..kk.kk."
   ]] },
-  // Plunky the Frog (World 3 workshop): a cute green frog in a little Santa hat who throws pianos. Frames: 0-1 idle (bob), 2 = wind-up
+  // Froppy (World 3 workshop): a cute green frog in a little Santa hat who throws pianos. Frames: 0-1 idle (bob), 2 = wind-up
   // (arms up, the piano is drawn above his head by the game), 3 = throw (arm forward). The hat sits above the 14x13 hitbox.
   frog: { pal:{ g:'#7ed957', G:'#3f9a3a', t:'#e4f7b0', W:'#e8f0ff' }, f:[
     ["...........kk.....", "..........kWWk....", ".........krkk.....", "........krrk......", ".......krrrk......", "...kkkkWWWWkkkk...", "..kwwwwkkkkwwwwk..", ".kwkkwwwkkwkkwwwk.", ".kwkkwwwggwkkwwwk.", ".kgwwwwggggwwwwgk.", ".kggggggggggggggk.", ".kgcggggggggggcgk.", ".kgkggggggggggkgk.", "..kgkkkkkkkkkkgk..", "..kggttttttttggk..", ".kgGgttttttttgGgk.", ".kGGgttttttttgGGk.", "..kkkkkkkkkkkkkk.."],
@@ -232,7 +232,7 @@ const BOSS = {
 const ITEMS = {
   coin: ["....kk", "....kyk", "....kyyk", "....kykyk", "....kyk.yk", "....kyk..k", "....kyk", "..kkkyk", ".kyyyyk", "kyyyyyk", "kyyyyk", ".kkkk"],
   piano: ["..kkkkkkkkkkkk..", ".knnnnnnnnnnnnk.", ".knNNNNNNNNNNnk.", ".knnnnnnnnnnnnk.", "kkkkkkkkkkkkkkkk", "kwkwkwwkwkwkwwkk", "kwwwwwwwwwwwwwwk",
-    "kkkkkkkkkkkkkkkk", ".knnnnnnnnnnnnk.", ".knNnnnnnnnnNnk.", ".knnnnnnnnnnnnk.", ".kNk........kNk.", ".kk..........kk."],   // Plunky's little upright piano
+    "kkkkkkkkkkkkkkkk", ".knnnnnnnnnnnnk.", ".knNnnnnnnnnNnk.", ".knnnnnnnnnnnnk.", ".kNk........kNk.", ".kk..........kk."],   // Froppy's little upright piano
   heart: [".kk.kk.", "krrkrrk", "krrrrrk", "krrrrrk", ".krrrk.", "..krk..", "...k..."],
   bolt: ["...kkk", "..kyyk", ".kyyk", "kyyyykk", "kkkyyyk", "..kyyk", ".kyk", ".kk"],
   plume: ["..rr", ".rrrr", "rrrrr", ".rrr", "..yy", "..yy"],
