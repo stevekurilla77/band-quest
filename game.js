@@ -18,7 +18,23 @@ const ENEMY_KIND = {
   reindeer:{ w:14, h:14, antler:true, speed:0 },     // Comet the Antler-Tosser (World 3-3 Reindeer Harbor): lowers his head, then throws his antlers like a boomerang     // Froppy (World 3 workshop): winds up with a piano over his head, then lobs it
   skeleton:{ w:12, h:17, skeleton:true, speed:0 },     // Splashbones the moat skeleton (World 5-2): hides in the moat, ripples, leaps onto the raft, rattles at you, dives back in
   armor:   { w:14, h:20, hp:2, armor:true, speed:16 }, // Sir Clanks-a-Lot (World 5-3): an empty suit of armor that clanks around and lunges with his sword (2 notes or 1 stomp)
+  bones:   { w:12, h:17, bones:true, speed:0 },        // Rattlebones (v29, World 5-3): hides in a treasure chest or under the floor, rattles ("!"), pops out, walks at you
+  tango:   { w:22, h:18, hp:2, tango:true, speed:0 },  // the Tango Couple (v29, World 5-3): two ghosts dancing a tango; she throws roses (2 notes, 1 stomp or the tuba)
+  megahen: { w:44, h:40, hp:6, mega:true, speed:0 },   // Mega Hen (v29, World 2-3): a coop hen hit by a tuba bomb turns into this mini-boss
 };
+// v29 Knight's Closet extras. Tango Couple: dances in place; 0.9 s wind-up ("!" + the rose raised, + a blinking marker where an arcing rose will land),
+// then one slow rose: every other throw is a high arc that lands on the marked spot, the others glide slowly (55 px/s) straight at you. One rose at a time.
+// Notes pop roses, a stomp bounces off one, the tuba smashes them; a hit costs 1 heart.
+const TANGO = { range:170, min:40, wind:.9, flight:1.2, grav:360, flat:55, cool:3.6, first:1.6, sway:26 };
+// Rattlebones: waits in a treasure chest (or under a cracked floor tile) until you come within ~5 tiles (not right on top of him), rattles for 1 s
+// ("!", lid jumping / dust + bony fingers poking out — can't hurt you yet), pops out and walks toward you slowly. 1 note, 1 stomp or the tuba.
+const BONES = { wake:84, min:34, rattle:1.0, walk:22, roam:72 };
+// swinging spiked chain balls hung from the ceiling: a slow pendulum at chest height; jump over the ball or time your run. Touching it costs 1 heart.
+const CHAIN = { top:30, len:152, amp:.36, period:4.2, r:7 };
+// Mega Hen (World 2-3): grows for 0.9 s (harmless), then walks at you and takes turns: egg toss (0.85 s wind-up + a marker where the egg lands)
+// or a big jump (0.95 s wind-up, wings flapping + a marker where she'll land) that leaves her dizzy for 1.5 s (touching her then is safe).
+// 6 HP: a note = 1, a stomp = 2, a tuba bomb = 3. When beaten she drops a heart and 5 notes and turns back into a hen.
+const MEGA = { hp:6, grow:.9, walk:24, wind:.85, eggT:1.1, eggGrav:520, jumpT:.95, jumpWind:.95, dizzy:1.5, cool:1.5, roam:88 };
 // Froppy's pianos: wind-up 0.9 s ("!" + the piano lifted + a blinking shadow where it will land), a slow 1.25 s arc, one piano at a time,
 // a long cooldown, only while he's on screen and the hero isn't right next to him. Notes pop a piano, a stomp bounces off it, a bass bomb smashes it.
 // Comet's antlers: 0.8 s wind-up (head down, antlers glow, "!"), then they fly out flat at head height ~6.5 tiles and come back (2.2 s round trip).
@@ -517,6 +533,96 @@ function genBoss(){
   return { w, map, coins:[], enemies:[], gTop:new Array(w).fill(12), cpX:2*TS, goalX:-1, startX:2*TS, boss:true };
 }
 
+// ---------- HIDDEN BLOCKS (v29) ----------
+// Some floating platforms can't be reached with the normal jump (the jump is never changed). After a stage is built, a small physics
+// simulation (same numbers as the hero: run 108 px/s, jump -365, gravity 1100, short-hop cut to -130) finds every surface the hero can
+// stand on, starting from the main floor. For each platform it can't reach, an invisible block is put in the air 3 tiles above the floor
+// next to it (or a chain of two, like stairs). Jump into it from below and it appears (+ a note); stand on it to climb up. A faint sparkle
+// hints where it is. Up there: a row of notes and a heart. A block is only kept if the simulation proves it makes the platform reachable
+// and does not cut off anything that was reachable before (even once revealed), and never over or next to a pit.
+const HIDDEN = { max:8, sparkle:2.4 };
+function reachSolver(map, w, gTop){
+  const at = (x, y) => (x < 0 || x >= w || y < 0 || y >= ROWS) ? 0 : map[y*w + x];
+  const sol = (tx, ty) => tx < 0 || tx >= w ? true : ty < 0 || ty >= ROWS ? false : (map[ty*w + tx] > 0 && map[ty*w + tx] !== 5);
+  const mx = (e, dx) => { e.x += dx; const top = Math.floor(e.y/TS), bot = Math.floor((e.y + e.h - .01)/TS);
+    if (dx > 0){ const tx = Math.floor((e.x + e.w)/TS); for (let ty = top; ty <= bot; ty++) if (sol(tx, ty)){ e.x = tx*TS - e.w - .01; break; } }
+    else if (dx < 0){ const tx = Math.floor(e.x/TS); for (let ty = top; ty <= bot; ty++) if (sol(tx, ty)){ e.x = (tx + 1)*TS + .01; break; } } };
+  const my = (e, dy) => { const prevB = e.y + e.h; e.y += dy; e.g = false; const l = Math.floor(e.x/TS), r = Math.floor((e.x + e.w - .01)/TS);
+    if (dy > 0){ const ty = Math.floor((e.y + e.h)/TS); for (let tx = l; tx <= r; tx++) if (sol(tx, ty) || (at(tx, ty) === 5 && prevB <= ty*TS + .5)){ e.y = ty*TS - e.h; e.vy = 0; e.g = true; break; } }
+    else if (dy < 0){ const ty = Math.floor(e.y/TS); for (let tx = l; tx <= r; tx++) if (sol(tx, ty)){ e.y = (ty + 1)*TS; e.vy = 0; break; } } };
+  const stand = (c, r) => r > 0 && r < ROWS && c >= 0 && c < w && at(c, r) > 0 && !sol(c, r - 1) && !sol(c, r - 2);
+  // one jump (or walk-off) from standing on tile (c, r): returns the tile it lands on, or -1
+  const sim = (x0, r, vx, hold, air, jump, jumpAt = 0) => { const e = { x:x0, y:r*TS - 20, w:10, h:20, vx, vy:0, g:true }; let flew = false;
+    for (let f = 0; f < 200; f++){ const dt = 1/60;
+      if (air) e.vx = clamp(e.vx + air*650*dt, -108, 108); else { const fr = 300*dt; e.vx = Math.abs(e.vx) <= fr ? 0 : e.vx - Math.sign(e.vx)*fr; }
+      if (jump && f === jumpAt) e.vy = -365; if (f >= jumpAt + hold && e.vy < -130) e.vy = -130; e.vy = Math.min(420, e.vy + 1100*dt);
+      mx(e, e.vx*dt); my(e, e.vy*dt); if (!e.g) flew = true;
+      if (e.g && flew){ const ry = Math.round((e.y + e.h)/TS), cc = Math.floor((e.x + 5)/TS); for (const c of [cc, Math.floor(e.x/TS), Math.floor((e.x + 9.99)/TS)]) if (stand(c, ry)) return ry*w + c; return -1; }
+      if (e.y > H + 24) return -1; }
+    return -1; };
+  // coarse moves prove a spot IS reachable (a few easy jumps); fine moves (more speeds, hold lengths, standing right on the edge of a
+  // ledge) are used to decide a platform is NOT reachable, so a hidden block only goes where a real player truly can't get already
+  const VX = [-108, -54, 0, 54, 108], HOLD = [4, 9, 99], AIR = [-1, 0, 1];
+  const FVX = [-108, -81, -54, -27, 0, 27, 54, 81, 108], FHOLD = [3, 6, 9, 12, 16, 22, 99];
+  let fine = false; const memo = new Map();
+  const moves = (c, r) => { const key = (fine ? 'f' : 'c') + (r*w + c); if (memo.has(key)) return memo.get(key); const out = new Set(), xs = [c*TS + 3];
+    const open = k => !sol(k, r - 1) && !sol(k, r - 2), edgeL = fine && !stand(c - 1, r) && open(c - 1), edgeR = fine && !stand(c + 1, r) && open(c + 1);
+    if (edgeL) xs.push(c*TS - 8); if (edgeR) xs.push(c*TS + 14);
+    // coyote time (0.09 s): run off the edge and jump a few frames later, already in the air
+    for (const [d, ok, x0] of [[-1, edgeL, c*TS - 8], [1, edgeR, c*TS + 14]]) if (ok) for (const v of stand(c - d, r) ? [108, 54] : [54])
+      for (const at of [2, 4, 5]) for (const hold of FHOLD) for (const air of [0, d]){ const k = sim(x0, r, d*v, hold, air, true, at); if (k >= 0) out.add(k); }
+    for (const x0 of xs) for (const vx of fine ? FVX : VX){ if (Math.abs(vx) > 60 && !stand(c - Math.sign(vx), r) && !(fine && Math.abs(vx) < 90 && x0 === c*TS + 3)) continue;   // a full run-up needs room behind
+      for (const hold of fine ? FHOLD : HOLD) for (const air of AIR){ const k = sim(x0, r, vx, hold, air, true); if (k >= 0) out.add(k); } }
+    for (const x0 of xs) for (const d of [-1, 1]) for (const v of fine ? [108, 54, 20] : [108]){ const k = sim(x0, r, d*v, 0, d, false); if (k >= 0) out.add(k); }
+    if (!lockMemo) memo.set(key, out); return out; };
+  let lockMemo = false;
+  // BFS over standable tiles; lim = optional [x0, x1] column window
+  const reach = (seeds, lim) => { const seen = new Set(), q = []; for (const k of seeds) if (!seen.has(k)){ seen.add(k); q.push(k); }
+    while (q.length){ const k = q.pop(), c = k % w, r = (k - c)/w; for (const n of moves(c, r)){ const nc = n % w; if (lim && (nc < lim[0] || nc > lim[1])) continue; if (!seen.has(n)){ seen.add(n); q.push(n); } } }
+    return seen; };
+  const floorSeeds = (x0 = 0, x1 = w - 1) => { const s = []; for (let c = Math.max(0, x0); c <= Math.min(w - 1, x1); c++) if (gTop[c] < ROWS && stand(c, gTop[c])) s.push(gTop[c]*w + c); return s; };
+  return { at, sol, stand, reach, floorSeeds, sim, moves, setFine(v){ fine = v; }, setMemo(on){ lockMemo = !on; if (!on) memo.clear(); } };
+}
+function addHiddenBlocks(b){
+  const w = b.w, map = b.map, gTop = b.gTop, S = reachSolver(map, w, gTop);
+  // "can the hero already get there?" is decided generously: fine jumps + coyote time, and moving platforms stamped in as one-way
+  // ledges at their highest and resting heights (and swing reach), so a block only goes where a player truly can't get today
+  const m2 = map.slice(); for (const m of b.movers || []){ const ax = m.kind === 'swing' ? (m.amp || 0) : 0, ay = m.kind === 'bob' ? (m.amp || 0) : 0;
+    for (const yy of [m.y - ay, m.y]){ const r = Math.round(yy/TS); if (r < 1 || r >= ROWS) continue; for (let c = Math.floor((m.x - ax)/TS); c <= Math.floor((m.x + m.w + ax - 1)/TS); c++) if (c >= 0 && c < w && !m2[r*w + c]) m2[r*w + c] = 5; } }
+  const S0 = reachSolver(m2, w, gTop); S0.setFine(true); const R0 = S0.reach(S0.floorSeeds()); S.setMemo(false);
+  // unreachable platforms = runs of standable tiles (same row) that no jump from the floor can get to
+  const plats = []; for (let r = 2; r < ROWS; r++){ let a = -1; for (let c = 0; c <= w; c++){ const u = c < w && S.stand(c, r) && !R0.has(r*w + c);
+    if (u && a < 0) a = c; if (!u && a >= 0){ plats.push({ a, b:c - 1, r }); a = -1; } } }
+  const pitNear = c => { for (let k = c - 2; k <= c + 2; k++) if (k < 0 || k >= w || gTop[k] >= ROWS) return true; return false; };
+  const goal = b.goalX/TS, cp = b.cpX/TS, hidden = [], secrets = [];
+  const free = (c, r) => !S.at(c, r) && !hidden.some(h => h.x === c && h.y === r);
+  const okSpot = (c, r) => c > 4 && c < goal - 14 && Math.abs(c - cp) > 2 && r >= 1 && free(c, r) && !pitNear(c);
+  const clearCol = (c, r0, r1) => { for (let y = r0; y <= r1; y++) if (S.sol(c, y)) return false; return true; };
+  const tryBlocks = (list, plat) => {   // put the blocks in for real, then prove: the platform is reached and nothing reachable before is lost (blocks revealed)
+    for (const h of list) map[h.y*w + h.x] = 4;
+    const x0 = plat.a - 14, x1 = plat.b + 14, seeds = S.floorSeeds(x0, x1), after = S.reach(seeds, [x0, x1]);
+    let ok = false; for (let c = plat.a; c <= plat.b; c++) if (after.has(plat.r*w + c)) ok = true;
+    if (ok){ for (const h of list) map[h.y*w + h.x] = 0; const before = S.reach(seeds, [x0, x1]); for (const k of before) if (!after.has(k)){ ok = false; break; } for (const h of list) map[h.y*w + h.x] = 4; }
+    for (const h of list) map[h.y*w + h.x] = 0; return ok; };
+  for (const pl of plats){ if (hidden.length >= HIDDEN.max*2 || secrets.length >= HIDDEN.max) break;
+    if (pl.a < 6 || pl.b > goal - 12) continue; { let onlyTuba = true; for (let c = pl.a; c <= pl.b; c++) if (S.at(c, pl.r) !== 8) onlyTuba = false; if (onlyTuba) continue; }   // (standing ON the golden tuba block isn't a place)
+    let pick = null; const cols = []; for (let d = 1; d <= 3; d++) cols.push(pl.a - d, pl.b + d); for (let c = pl.a; c <= pl.b; c++) cols.push(c);
+    // one block, 3 tiles above a floor the hero already stands on
+    for (const hx of cols){ const s = gTop[hx]; if (s >= ROWS || !R0.has(s*w + hx)) continue; const hy = s - 3;
+      if (hy - pl.r > 3 || hy <= pl.r || !okSpot(hx, hy) || !clearCol(hx, hy + 1, s - 1) || !clearCol(hx, hy - 2, hy - 1)) continue;
+      if (tryBlocks([{ x:hx, y:hy }], pl)){ pick = [{ x:hx, y:hy }]; break; } }
+    // a chain of two (like stairs): the 2nd one sits 3 higher and one tile over, bumped while standing on the edge of the 1st
+    if (!pick) for (const hx of cols){ const s = gTop[hx]; if (s >= ROWS || !R0.has(s*w + hx)) continue; const hy = s - 3;
+      if (!okSpot(hx, hy) || !clearCol(hx, hy + 1, s - 1) || !clearCol(hx, hy - 2, hy - 1)) continue;
+      for (const dx of [1, -1]){ const h2 = { x:hx + dx, y:hy - 3 }; if (h2.y - pl.r > 3 || h2.y <= pl.r || !okSpot(h2.x, h2.y) || !clearCol(h2.x, h2.y + 1, hy) || !clearCol(h2.x, h2.y - 2, h2.y - 1)) continue;
+        if (tryBlocks([{ x:hx, y:hy }, h2], pl)){ pick = [{ x:hx, y:hy }, h2]; break; } }
+      if (pick) break; }
+    if (!pick) continue;
+    hidden.push(...pick); secrets.push({ a:pl.a, b:pl.b, r:pl.r, blocks:pick.map(h => h.x + ',' + h.y) });
+    for (let c = pl.a; c <= pl.b; c++) if (!b.coins.some(o => Math.floor(o.x/TS) === c && Math.abs(o.y - ((pl.r - 1)*TS + 1)) < 20)) b.coins.push({ x:c*TS + 3, y:(pl.r - 1)*TS + 1, secret:true });
+    b.bonus = b.bonus || []; b.bonus.push({ kind:'heart', x:Math.round((pl.a + pl.b + 1)/2*TS), y:(pl.r - 1)*TS - 2, still:true, secret:true }); }
+  b.hidden = hidden; b.secrets = secrets; b.unreachable = plats.length; return b; }
+
 // ---------- special stages (stage index 0-2 per world; ids, saves and unlocks are unchanged) ----------
 //   World 2-2 = inside the barn, World 2-3 = in the chicken coop, World 3-2 = Santa's toy workshop (with Froppy the piano-throwing frog),
 //   World 3-3 = Reindeer Harbor (snowy port, Comet the Antler-Tosser), World 4-2 = sky level, World 4-3 = pirate ship,
@@ -589,8 +695,24 @@ function genInterior(seed, idx, enemyType, world, kind){
   for (const list of [enemies, frogs, knights]) for (let i = list.length - 1; i >= 0; i--){ const c = Math.floor(list[i].x/TS); if (nearGap(c) || piles.some(p => c >= p - 1 && c <= p + 3) || Math.abs(c - cp) < 3) list.splice(i, 1); }
   mixEnemies(seed, idx, world, w, map, gTop, enemies, cp); if (ar) for (const e of enemies) if (e.type === 'dragon') e.y -= TS;   // Knight's Closet: Burney flies up near the banners too
   enemies.push(...frogs, ...knights);
-  return { w, map, skin, coins, enemies, gTop, cpX:cp*TS, goalX:(w - 10)*TS, startX:2*TS, tuba:tuba ? { x:tuba.x, y:tuba.y, piles } : { piles }, deco, indoor:kind };
+  const chains = ar ? armoryExtras(seed, idx, w, map, gTop, enemies, cp, st) : [];
+  return { w, map, skin, coins, enemies, gTop, cpX:cp*TS, goalX:(w - 10)*TS, startX:2*TS, tuba:tuba ? { x:tuba.x, y:tuba.y, piles } : { piles }, deco, indoor:kind, chains };
 }
+// v29 Knight's Closet extras (own seeded RNG, added AFTER the layout, so the closet's floor plan is unchanged):
+// 3 swinging chain balls, 3 Tango Couples and 4 Rattlebones, each on open floor, spread out and never next to another bad guy or the checkpoint.
+function armoryExtras(seed, idx, w, map, gTop, enemies, cp, st){
+  const X = rng(hash(seed + '#' + idx + '#closet')), chains = [], taken = [];
+  const col = e => Math.floor((e.x + 7)/TS);
+  const open = (c, r0, half) => { for (let k = c - half; k <= c + half; k++){ if (k < 0 || k >= w || gTop[k] !== 12) return false; for (let y = r0; y < 12; y++) if (map[y*w + k]) return false; } return true; };
+  const far = (c, d, tg = 8) => enemies.every(e => Math.abs(col(e) - c) >= d) && taken.every(t => Math.abs(t - c) >= tg) && Math.abs(c - cp) > 6;
+  const spots = (half, r0) => { const out = []; for (let c = 26; c < st - 8; c++) if (open(c, r0, half)) out.push(c); return out; };
+  const pickSpread = (list, n, gap, d, tg) => { const got = [], cand = list.slice(); for (let i = cand.length - 1; i > 0; i--){ const j = Math.floor(X()*(i + 1)); [cand[i], cand[j]] = [cand[j], cand[i]]; }
+    for (const c of cand){ if (got.length >= n) break; if (got.every(g => Math.abs(g - c) >= gap) && far(c, d, tg)){ got.push(c); taken.push(c); } } return got.sort((a, b) => a - b); };
+  const flat = (c, k) => { for (let j = c - k; j <= c + k; j++) if (gTop[j] !== 12) return false; return true; };   // no pit or step within 8 tiles of a chain
+  for (const c of pickSpread(spots(3, 1).filter(c => flat(c, 8)), 3, 26, 5, 6)) chains.push({ x:c*TS + 8, y:CHAIN.top, len:CHAIN.len, amp:CHAIN.amp, period:CHAIN.period, ph:X()*6.28 });
+  for (const c of pickSpread(spots(2, 5), 3, 28, 4, 6)) enemies.push({ type:'tango', x:c*TS - 3, y:12*TS - 4*TS - 4, fly:true });
+  pickSpread(spots(1, 9).filter(c => flat(c, 4)), 4, 22, 4).forEach((c, i) => enemies.push({ type:'bones', x:c*TS + 2, y:12*TS - 17, hide:i % 2 ? 'floor' : 'chest' }));
+  return chains; }
 // World 3-3 Reindeer Harbor (hand-built): snowy docks on stilts over icy water (falling in = a pit), two moored ships you board by
 // their gangplanks, cargo crates, a crane-hung cargo pallet that rises and sinks and a swinging cargo net over the wide gaps, reindeer
 // loading presents onto ships in the background. Bad guys: gingerbread grunts, Comet the Antler-Tosser, and every mix-in troublemaker.
@@ -1057,6 +1179,7 @@ function newRun(opts){
   G.special = special;
   const wn = Math.max(1, opts.worldNo | 0 || 1);
   G.base = boss ? genBoss() : special === 'ship' ? genShip(G.enemyType) : special === 'sky' ? genSky(G.enemyType) : special === 'port' ? genPort(G.enemyType) : special === 'moat' ? genMoat(G.enemyType) : special ? genInterior(opts.seed, opts.level, G.enemyType, wn, special) : genLevel(opts.seed, opts.level, G.enemyType, wn);
+  if (!boss && !G.base.auto) addHiddenBlocks(G.base);   // v29 secret blocks (not on the auto-scrolling raft/ship rides)
   resetLevel(true);
 }
 function resetLevel(first){
@@ -1065,8 +1188,8 @@ function resetLevel(first){
   G.vanish = (b.vanish || []).map(v => ({ ...v, st:'idle', t:0 }));
   G.coinList = b.coins.map(c => ({ ...c, taken:false }));
   G.enemies = b.enemies.map(e => { const K = ENEMY_KIND[e.type] || {};
-    return { ...e, w:K.w || 14, h:K.h || 14, vx:-(K.speed || 28), vy:0, baseY:e.y, t:Math.random()*6, alive:true, dead:0, face:-1, hp:K.hp || 1, st:'idle', cool:(e.ri != null ? BUBBLE.first : K.armor ? ARMOR.first : K.skeleton ? SKEL.first : K.thrower ? PIANO.first : K.antler ? ANTLER.first : ARCHER.first) + Math.random(), dir:-1, hopT:.4 + Math.random()*.5 }; });
-  G.shots = []; G.eshots = []; G.marks = []; G.parts = []; G.bumps = []; G.pops = []; G.pickups = []; G.bombs = []; G.blasts = []; G.floats = [];
+    return { ...e, w:K.w || 14, h:K.h || 14, vx:-(K.speed || 28), vy:0, baseY:e.y, t:Math.random()*6, alive:true, dead:0, face:-1, hp:K.hp || 1, st:'idle', cool:(e.ri != null ? BUBBLE.first : K.tango ? TANGO.first : K.armor ? ARMOR.first : K.skeleton ? SKEL.first : K.thrower ? PIANO.first : K.antler ? ANTLER.first : ARCHER.first) + Math.random(), dir:-1, hopT:.4 + Math.random()*.5 }; });
+  G.hidden = (b.hidden || []).map(h => ({ ...h, shown:false })); G.chains = b.chains || []; G.megaFrom = new Set(); G.shots = []; G.eshots = []; G.marks = []; G.parts = []; G.bumps = []; G.pops = []; G.pickups = (b.bonus || []).map(k => ({ ...k, vy:0 })); G.bombs = []; G.blasts = []; G.floats = [];
   const sx = G.cpReached ? b.cpX : b.startX;
   G.p = { x:sx, y:(gTopAt(sx) - 2)*TS - 4, w:10, h:20, vx:0, vy:0, face:1, onGround:false, coyote:0, buffer:0, hearts:G.maxHearts, inv:first ? 0 : 1.5, cool:0, dead:0, anim:0, clear:0 };
   G.cam = clamp(G.p.x - 100, 0, Math.max(0, G.L.w*TS - W));
@@ -1115,7 +1238,7 @@ function step(dt){
   if (p.buffer > 0 && p.coyote > 0){ p.vy = -365; p.coyote = 0; p.buffer = 0; sfx('jump'); }
   if (!input.jump && p.vy < -130) p.vy = -130;
   p.vy = Math.min(420, p.vy + 1100*dt);
-  const prevB = p.y + p.h; moveX(p, p.vx*dt); moveY(p, p.vy*dt); if (G.movers.length) landMovers(prevB);
+  const prevB = p.y + p.h; moveX(p, p.vx*dt); if (G.hidden.length && p.vy < 0) revealHidden(p, p.vy*dt); moveY(p, p.vy*dt); if (G.movers.length) landMovers(prevB);
   if (p.bonk) bonk(p.bonk.tx, p.bonk.ty);
   if (G.vanish.length) updateVanish(dt);
   if (G.base.indoor === 'coop') henClucks();
@@ -1130,7 +1253,7 @@ function step(dt){
   input.jumpPressed = input.shootPressed = input.tubaPressed = false;
   // coins
   for (const c of G.coinList) if (!c.taken && Math.abs(c.x + 5 - (p.x + 5)) < 11 && Math.abs(c.y + 6 - (p.y + 10)) < 15){ c.taken = true; addCoin(); puff(c.x + 5, c.y + 6, '#ffd23f', 4, 40); }
-  for (const pk of G.pickups){ if (pk.kind === 'tuba'){ tubaPickup(pk, dt); continue; } pk.vy = Math.min(200, pk.vy + 600*dt); pk.y += pk.vy*dt; if (pk.y > (gTopAt(pk.x) )*TS - 8){ pk.y = gTopAt(pk.x)*TS - 8; pk.vy = 0; }
+  for (const pk of G.pickups){ if (pk.kind === 'tuba'){ tubaPickup(pk, dt); continue; } if (pk.still) pk.vy = 0; else pk.vy = Math.min(200, pk.vy + 600*dt); pk.y += pk.vy*dt; if (!pk.still && pk.y > (gTopAt(pk.x) )*TS - 8){ pk.y = gTopAt(pk.x)*TS - 8; pk.vy = 0; }
     if (!pk.taken && Math.abs(pk.x - (p.x + 5)) < 12 && Math.abs(pk.y - (p.y + 10)) < 16){ pk.taken = true; if (pk.kind === 'chord'){ G.chord = true; G.msg = { text:'POWER CHORD!', t:1.4 }; sfx('power'); } else { p.hearts = Math.min(G.maxHearts, p.hearts + 1); sfx('heart'); } } }
   G.pickups = G.pickups.filter(k => !k.taken);
   // shots
@@ -1141,6 +1264,9 @@ function step(dt){
     if (Math.abs(e.x - p.x) > 300) continue;
     e.t += dt; e.flash = Math.max(0, (e.flash || 0) - dt); const K = ENEMY_KIND[e.type] || {};
     if (e.ri != null) updateRider(e, dt, p);
+    else if (K.tango) updateTango(e, dt, p);
+    else if (K.bones) updateBones(e, dt, p);
+    else if (K.mega) updateMega(e, dt, p);
     else if (K.skeleton) updateSkeleton(e, dt, p);
     else if (K.armor) updateArmor(e, dt, p);
     else if (K.archer) updateArcher(e, dt, p);
@@ -1153,13 +1279,14 @@ function step(dt){
       if (Math.abs(e.x - (e.homeX ??= e.x)) > 48) e.vx = -Math.sign(e.x - e.homeX)*Math.abs(e.vx);
       if (e.onGround){ const fx = Math.floor((e.vx > 0 ? e.x + e.w + 1 : e.x - 1)/TS), fy = Math.floor((e.y + e.h + 2)/TS); if (!solid(fx, fy) && tileAt(fx, fy) !== 5) e.vx = -e.vx; }
       if (e.y > H + 40) e.alive = false; }
-    if (!K.archer && !K.hop && !K.thrower && !K.antler && !K.skeleton && !K.armor && e.ri == null) e.face = e.vx > 0 ? 1 : -1;
+    if (!K.archer && !K.hop && !K.thrower && !K.antler && !K.skeleton && !K.armor && !K.tango && !K.bones && !K.mega && e.ri == null) e.face = e.vx > 0 ? 1 : -1;
     if (e.sub || !e.alive) continue;   // a Splashbones hiding under the water can't be hit and can't hurt
     for (const s of G.shots) if (!s.dead && e.alive && overlap({ x:s.x, y:s.y, w:6, h:6 }, e)){ s.dead = 1; hitEnemy(e); }
     if (e.alive && !p.dead && overlap(p, e)){
-      if (p.vy > 30 && p.y + p.h - e.y < 15){ kill(e, true); p.vy = input.jump ? -380 : -260; }
-      else hurt('enemy:' + e.type); }
+      if (p.vy > 30 && p.y + p.h - e.y < 15){ if (K.mega){ megaHit(e, 2); G.megaStomps = (G.megaStomps || 0) + 1; } else kill(e, true); p.vy = input.jump ? -380 : -260; }
+      else if (!K.tango && !(K.mega && (e.st === 'grow' || e.st === 'dizzy'))) hurt('enemy:' + e.type); }   // the Tango Couple is too busy dancing to hurt you: only their roses do
   }
+  if (G.chains.length) updateChains(p);
   if (G.boss) updateBoss(dt);
   if (G.base.auto){ updateCannons(dt); updateSpawners(dt); }
   for (const s of G.eshots){ s.t += dt; if (s.grav) s.vy += s.grav*dt; s.x += s.vx*dt; s.y += s.vy*dt; s.rot = (s.rot || 0) + dt*12;
@@ -1168,6 +1295,7 @@ function step(dt){
     if (s.kind === 'note' || s.kind === 'whole') spellShot(s, p);
     if (s.kind === 'piano') pianoShot(s, p);
     if (s.kind === 'antler') antlerShot(s, p);
+    if (s.kind === 'rose' || s.kind === 'megaegg'){ softShot(s, p); continue; }
     if (s.kind === 'bubble'){ bubbleShot(s, p); continue; }
     if (s.kind === 'rock' && s.y > 12*TS - 8){ s.dead = 1; puff(s.x, s.y, '#9aa0b4', 6); G.shake = .1; }
     if (s.kind === 'arrow'){ if (s.t > ARCHER.life || solid(Math.floor((s.x + Math.sign(s.vx)*6)/TS), Math.floor(s.y/TS))){ s.dead = 1; puff(s.x, s.y, '#e0a868', 4, 30); }
@@ -1293,7 +1421,80 @@ function updateArmor(e, dt, p){   /* Sir Clanks-a-Lot: clank, clank (patrols) �
   else if (e.st === 'wind'){ if (e.stT <= 0){ e.st = 'lunge'; e.stT = A.lunge; sfx('clank'); G.lunges = (G.lunges || 0) + 1; } }
   else if (e.st === 'lunge'){ if (!(e.onGround && edge(e.face))) moveX(e, e.face*A.dash*dt); if (e.hitWall || e.stT <= 0){ e.st = 'rest'; e.stT = A.rest; } }
   else if (e.st === 'rest'){ if (e.stT <= 0){ e.st = 'idle'; e.cool = A.cool + Math.random()*.8; e.vx = e.face*A.speed; } } }
-function hitEnemy(e){ if ((e.hp || 1) > 1){ e.hp--; e.flash = .3; sfx('bump'); puff(e.x + e.w/2, e.y + 4, '#ffffff', 4, 40); return; } kill(e); }
+// ---------- v29: the Tango Couple, Rattlebones, swinging chain balls (World 5-3) + Mega Hen (World 2-3) ----------
+function updateTango(e, dt, p){   /* dances in place → wind-up ("!", rose raised, marker for an arcing rose) → one slow rose → long cooldown */
+  const T = TANGO, dx = (p.x + p.w/2) - (e.x + e.w/2), sx = e.x - G.cam, home = (e.homeX ??= e.x);
+  e.x = home + Math.sin(e.t*1.1)*T.sway*(e.st === 'wind' ? .3 : 1); e.y = e.baseY + Math.sin(e.t*2.2)*3; e.face = Math.sign(dx) || -1;
+  if (e.st === 'idle'){ e.cool -= dt;
+    if (e.cool <= 0 && !p.dead && !p.clear && sx > 8 && sx < W - e.w - 8 && Math.abs(dx) < T.range && Math.abs(dx) > T.min && !G.eshots.some(s => s.from === e)){
+      e.n = (e.n || 0) + 1; e.arc = e.n % 2 === 1; e.st = 'wind'; e.stT = T.wind; e.mark = e.arc ? landSpot(p.x + p.w/2, p.y + p.h) : null; sfx('windup'); } }
+  else if (e.st === 'wind'){ e.stT -= dt;
+    if (e.stT <= 0){ const x0 = e.x + e.w/2 + e.face*8, y0 = e.y + 2; e.st = 'throw'; e.stT = .35; sfx('toss'); G.roses = (G.roses || 0) + 1;
+      if (e.arc){ const m = e.mark, Tf = T.flight, ty = m.y ?? (H + 60); G.eshots.push({ kind:'rose', x:x0, y:y0, vx:(m.x - x0)/Tf, vy:(ty - 4 - y0 - .5*T.grav*Tf*Tf)/Tf, grav:T.grav, t:0, from:e, tx:m.x, ty:m.y, T:Tf, life:4 }); }
+      else { const tx = p.x + p.w/2, ty = p.y + p.h/2, d = Math.hypot(tx - x0, ty - y0) || 1; G.eshots.push({ kind:'rose', flat:true, x:x0, y:y0, vx:(tx - x0)/d*T.flat, vy:(ty - y0)/d*T.flat, t:0, from:e, life:5 }); } } }
+  else if (e.st === 'throw'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'idle'; e.cool = T.cool + Math.random()*.6; } } }
+function updateBones(e, dt, p){   /* hidden (can't hurt, can't be hit) → rattles 1 s ("!") → pops out → walks at the hero, never off a ledge */
+  const B = BONES, dx = (p.x + p.w/2) - (e.x + e.w/2), sx = e.x - G.cam, home = (e.homeX ??= e.x);
+  if (e.st === 'idle' || e.st === 'hide'){ e.st = 'hide'; e.sub = true; e.x = home; e.y = e.baseY; e.vx = 0; e.vy = 0;
+    if (!p.dead && !p.clear && sx > 6 && sx < W - 20 && Math.abs(dx) < B.wake && Math.abs(dx) > B.min && p.y + p.h > e.y - 40){ e.st = 'rattle'; e.stT = B.rattle; e.face = Math.sign(dx) || -1; sfx('rattle'); G.bonesWake = (G.bonesWake || 0) + 1; }
+    return; }
+  if (e.st === 'rattle'){ e.stT -= dt; if (Math.random() < .25) G.parts.push({ x:home + 6 + (Math.random() - .5)*14, y:e.baseY + e.h - 2, vx:(Math.random() - .5)*30, vy:-30 - Math.random()*30, life:.35, color:e.hide === 'chest' ? '#ffd23f' : '#9a94a8', s:2 });
+    if (e.stT <= 0){ e.st = 'pop'; e.sub = false; e.vy = -230; e.vx = e.face*24; sfx('rattle'); G.bonesPop = (G.bonesPop || 0) + 1; puff(home + 6, e.baseY + e.h - 4, e.hide === 'chest' ? '#ffd23f' : '#c8c0a0', 6, 60); }
+    return; }
+  e.vy = Math.min(400, e.vy + 1000*dt); moveX(e, e.vx*dt); moveY(e, e.vy*dt); if (e.y > H + 40){ e.alive = false; return; }
+  if (e.st === 'pop'){ if (e.onGround && e.vy >= 0){ e.st = 'walk'; } return; }
+  const d = Math.abs(dx) > 4 ? Math.sign(dx) : e.face || -1, fx = Math.floor((d > 0 ? e.x + e.w + 2 : e.x - 2)/TS), fy = Math.floor((e.y + e.h + 2)/TS);
+  e.face = d; e.vx = (!solid(fx, fy) && tileAt(fx, fy) !== 5) || Math.abs(e.x + d*4 - home) > B.roam ? 0 : d*B.walk;
+  if (G.t - (G.rattleT ?? -9) > 1.1 && sx > -8 && sx < W + 8){ G.rattleT = G.t; sfx('rattle'); } }
+function updateChains(p){   /* pendulums: angle = amp·sin(2πt/period + ph); the spiked ball (radius 7) costs 1 heart on touch */
+  if (p.dead || p.clear) return;
+  for (const c of G.chains){ const b = chainBall(c), nx = clamp(b.x, p.x, p.x + p.w), ny = clamp(b.y, p.y, p.y + p.h);
+    if (Math.hypot(nx - b.x, ny - b.y) < CHAIN.r - 1){ if (p.inv <= 0) G.chainHits = (G.chainHits || 0) + 1; hurt('chain'); } } }
+function chainBall(c){ const a = c.amp*Math.sin(G.t*Math.PI*2/c.period + c.ph); return { x:c.x + Math.sin(a)*c.len, y:c.y + Math.cos(a)*c.len, a }; }
+function softShot(s, p){   /* a Tango rose or a Mega Hen egg: notes pop it, a stomp bounces off it, the tuba smashes it, a hit costs 1 heart */
+  if (s.kind === 'rose') s.rot = s.t*8;
+  const lands = s.vy > 0 && ((s.ty != null && s.y + 3 >= s.ty) || solid(Math.floor(s.x/TS), Math.floor((s.y + 4)/TS)));
+  if (lands || (s.flat && solid(Math.floor(s.x/TS), Math.floor(s.y/TS))) || s.t > s.life){ if (s.ty != null && lands) s.y = Math.min(s.y, s.ty - 3); breakSoft(s); return; }
+  const box = { x:s.x - 5, y:s.y - 5, w:10, h:10 };
+  for (const n of G.shots) if (!n.dead && overlap({ x:n.x, y:n.y, w:6, h:6 }, { x:s.x - 7, y:s.y - 7, w:14, h:14 })){ n.dead = 1; G.softPops = (G.softPops || 0) + 1; breakSoft(s); return; }
+  if (p.dead) return;
+  if (p.vy > 30 && p.y + p.h - box.y < 10 && overlap(p, box)){ p.vy = input.jump ? -380 : -260; G.stompedShots = (G.stompedShots || 0) + 1; breakSoft(s); return; }
+  if (overlap(p, box)){ breakSoft(s); hurt('shot:' + s.kind); } }
+function breakSoft(s){ s.dead = 1; sfx(s.kind === 'rose' ? 'pop' : 'crate');
+  const cols = s.kind === 'rose' ? ['#e83a4a', '#9c1c30', '#ff8aa0', '#3a9a3a'] : ['#ffffff', '#fff6e8', '#ffd23f', '#e0d0b8'];
+  for (let i = 0; i < 10; i++) G.parts.push({ x:s.x, y:s.y, vx:(Math.random() - .5)*110, vy:-50 - Math.random()*90, life:.55, color:cols[i % 4], s:2 }); }
+// a coop hen + a tuba bomb = MEGA HEN (one at a time)
+function megaHen(d, h){ G.megaFrom.add(d); G.megaMade = (G.megaMade || 0) + 1;
+  const e = { type:'megahen', x:h.x - 22, y:12*TS - 40, w:44, h:40, vx:0, vy:0, baseY:12*TS - 40, t:0, alive:true, dead:0, face:h.face > 0 ? 1 : -1, hp:MEGA.hp, st:'grow', stT:MEGA.grow, cool:MEGA.cool, homeX:h.x - 22, inv:0 };   // drawn at 2× the sprite: twice the hero's height
+  G.enemies.push(e); G.msg = { text:'MEGA HEN!', t:1.8 }; G.floats.push({ text:'BAWK!!', x:h.x, y:12*TS - 44, t:0 }); sfx('cluck'); sfx('power');
+  for (let i = 0; i < 28; i++) G.parts.push({ x:h.x + (Math.random() - .5)*18, y:12*TS - 10 - Math.random()*14, vx:(Math.random() - .5)*170, vy:-40 - Math.random()*140, life:.8, color:i % 3 ? '#fff6e8' : '#ffffff', s:i % 4 ? 2 : 3 }); }
+function megaHit(e, n, force){ if (!e.alive || ((e.inv || 0) > 0 && !force) || e.st === 'grow') return; e.hp -= n; e.inv = .6; e.flash = .45; sfx('bossHit'); puff(e.x + e.w/2, e.y + 6, '#fff6e8', 8, 70);
+  if (e.hp <= 0) kill(e); }
+function updateMega(e, dt, p){
+  const M = MEGA, dx = (p.x + p.w/2) - (e.x + e.w/2), sx = e.x - G.cam, home = e.homeX, floor = 12*TS; e.inv = Math.max(0, (e.inv || 0) - dt);
+  if (e.st === 'grow'){ e.stT -= dt; e.y = floor - e.h; if (e.stT <= 0){ e.st = 'walk'; e.cool = .8; } return; }
+  if (e.st === 'leap'){ e.vy += M.eggGrav*2*dt; moveX(e, e.vx*dt); e.y += e.vy*dt; e.onGround = false;   // flies over the roosts (ignores one-way perches), lands on the floor
+    if (e.vy > 0 && e.y + e.h >= floor && e.y + e.h < floor + 12 && (solid(Math.floor(e.x/TS), 12) || solid(Math.floor((e.x + e.w - 1)/TS), 12))){ e.y = floor - e.h; e.onGround = true; }
+    if (e.onGround && e.vy >= 0){ e.st = 'dizzy'; e.stT = M.dizzy; e.vx = 0; G.shake = Math.max(G.shake, .25); sfx('bump'); puff(e.x + e.w/2, e.y + e.h, '#e8c050', 10, 80); G.megaLands = (G.megaLands || 0) + 1; }
+    if (e.y > H + 40) e.alive = false; return; }
+  e.vy = Math.min(400, e.vy + 1000*dt); moveY(e, e.vy*dt);
+  if (e.st === 'dizzy'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'walk'; e.cool = M.cool; } return; }
+  if (e.st === 'walk'){ e.face = Math.sign(dx) || -1; const d = e.face, fx = Math.floor((d > 0 ? e.x + e.w + 2 : e.x - 2)/TS), fy = Math.floor((e.y + e.h + 2)/TS);
+    if (Math.abs(dx) > 26 && (solid(fx, fy) || tileAt(fx, fy) === 5) && Math.abs(e.x + d*4 - home) < M.roam) moveX(e, d*M.walk*dt);
+    e.stepT = (e.stepT || 0) - dt; if (e.stepT <= 0){ e.stepT = .5; e.clk = (e.clk || 0) + 1; }
+    e.cool -= dt; if (e.cool <= 0 && e.onGround && !p.dead && !p.clear && sx > -6 && sx < W - e.w + 6 && Math.abs(dx) < 200){
+      e.n = (e.n || 0) + 1; e.next = e.n % 2 ? 'egg' : 'leap'; e.st = 'wind'; e.stT = e.next === 'egg' ? M.wind : M.jumpWind; sfx('windup');
+      if (e.next === 'egg') e.mark = landSpot(p.x + p.w/2, p.y + p.h);
+      else { let tx = clamp(p.x + p.w/2 - e.w/2, home - M.roam, home + M.roam); const ok = c => { for (const k of [Math.floor(c/TS), Math.floor((c + e.w - 1)/TS)]) if (!solid(k, 12)) return false; return true; };
+        if (!ok(tx)) tx = e.x; e.tx = tx; e.mark = { x:tx + e.w/2, y:floor }; } }
+    return; }
+  if (e.st === 'wind'){ e.stT -= dt; e.face = Math.sign(dx) || -1;
+    if (e.stT <= 0){ if (e.next === 'egg'){ const m = e.mark, x0 = e.x + e.w/2 + e.face*18, y0 = e.y + 10, Tf = M.eggT, ty = m.y ?? (H + 60); sfx('toss'); G.megaEggs = (G.megaEggs || 0) + 1;
+        G.eshots.push({ kind:'megaegg', x:x0, y:y0, vx:(m.x - x0)/Tf, vy:(ty - 4 - y0 - .5*M.eggGrav*Tf*Tf)/Tf, grav:M.eggGrav, t:0, from:e, tx:m.x, ty:m.y, T:Tf, life:4 }); e.st = 'throw'; e.stT = .4; }
+      else { const Tf = M.jumpT; e.st = 'leap'; e.vx = (e.tx - e.x)/Tf; e.vy = -M.eggGrav*Tf; e.onGround = false; sfx('jump'); G.megaJumps = (G.megaJumps || 0) + 1; } }
+    return; }
+  if (e.st === 'throw'){ e.stT -= dt; if (e.stT <= 0){ e.st = 'walk'; e.cool = M.cool; } } }
+function hitEnemy(e){ if (e.type === 'megahen'){ if (e.inv > 0 || e.st === 'grow') puff(e.x + e.w/2, e.y + 6, '#ffffff', 2, 30); else megaHit(e, 1); return; } if ((e.hp || 1) > 1){ e.hp--; e.flash = .3; sfx('bump'); puff(e.x + e.w/2, e.y + 4, '#ffffff', 4, 40); return; } kill(e); }
 function updateHopper(e, dt, K){ // Meep: sits a moment, then hops (never hops off a ledge or far from home)
   e.vy = Math.min(400, e.vy + 1000*dt);
   if (e.onGround){ e.vx = 0; e.hopT -= dt;
@@ -1358,7 +1559,7 @@ function breakPiano(s, landed){ s.dead = 1; sfx('plunk'); G.plunks = (G.plunks |
   const cols = ['#ffffff', '#1a1030', '#a8642a', '#5a3412']; for (let i = 0; i < 14; i++) G.parts.push({ x:s.x + (Math.random() - .5)*12, y:s.y, vx:(Math.random() - .5)*170, vy:-70 - Math.random()*150, life:.7, color:cols[i % 4], s:i % 3 ? 2 : 3 });
   G.floats.push({ text:'PLUNK!', x:s.x, y:s.y - 16, t:0 }); }
 function henClucks(){ const p = G.p, pc = p.x + p.w/2; if (p.dead || G.t - (G.cluckT ?? -9) < 2.5) return;   // walk past a hen and she clucks (sound follows the SFX setting)
-  for (const d of G.base.deco) if (d.k === 'hen' && Math.abs(henAt(d, G.t).x - pc) < 26 && p.y + p.h > 12*TS - 30){ G.cluckT = G.t; d.cl = G.t; G.clucks = (G.clucks || 0) + 1; sfx('cluck'); return; } }
+  for (const d of G.base.deco) if (d.k === 'hen' && !G.megaFrom?.has(d) && Math.abs(henAt(d, G.t).x - pc) < 26 && p.y + p.h > 12*TS - 30){ G.cluckT = G.t; d.cl = G.t; G.clucks = (G.clucks || 0) + 1; sfx('cluck'); return; } }
 function updateVanish(dt){ const p = G.p, L = G.L;
   for (const v of G.vanish){ const x0 = v.x0*TS, x1 = (v.x1 + 1)*TS, on = !p.dead && p.onGround && Math.abs(p.y + p.h - v.y*TS) < 1.5 && p.x + p.w > x0 && p.x < x1;
     if (v.st === 'idle'){ if (on){ v.st = 'shake'; v.t = VANISH.shake; v.n = (v.n || 0) + 1; } }
@@ -1372,8 +1573,20 @@ function kill(e, stomp){ e.alive = false; e.dead = 1; e.vy = -200; sfx('stomp');
   if (e.type === 'reindeer') G.floats.push({ text:'JINGLE!', x:e.x + e.w/2, y:e.y - 8, t:0 });
   if (e.type === 'skeleton'){ G.floats.push({ text:'CLATTER!', x:e.x + e.w/2, y:e.y - 8, t:0 }); sfx('rattle'); G.bones = (G.bones || 0) + 1;
     for (let i = 0; i < 8; i++) G.parts.push({ x:e.x + e.w/2, y:e.y + 6, vx:(Math.random() - .5)*140, vy:-80 - Math.random()*120, life:.7, color:i % 2 ? '#f4f0e0' : '#c8c0a0', s:2 }); }
+  if (e.type === 'tango'){ G.floats.push({ text:'OLE!', x:e.x + e.w/2, y:e.y - 8, t:0 }); G.tangoKO = (G.tangoKO || 0) + 1; for (let i = 0; i < 10; i++) G.parts.push({ x:e.x + e.w/2, y:e.y + 6, vx:(Math.random() - .5)*120, vy:-60 - Math.random()*100, life:.7, color:i % 2 ? '#e83a4a' : '#ffffff', s:2 }); }
+  if (e.type === 'bones'){ G.floats.push({ text:'CLATTER!', x:e.x + e.w/2, y:e.y - 8, t:0 }); sfx('rattle'); G.bonesKO = (G.bonesKO || 0) + 1;
+    for (let i = 0; i < 8; i++) G.parts.push({ x:e.x + e.w/2, y:e.y + 6, vx:(Math.random() - .5)*140, vy:-80 - Math.random()*120, life:.7, color:i % 2 ? '#f4f0e0' : '#c8c0a0', s:2 }); }
+  if (e.type === 'megahen'){ G.megaBeaten = (G.megaBeaten || 0) + 1; G.msg = { text:'MEGA HEN BEATEN!', t:1.8 }; G.floats.push({ text:'BAWK...', x:e.x + e.w/2, y:e.y - 10, t:0 }); sfx('fanfare');   // she shrinks back to a hen; reward: a heart + 5 notes
+    G.pickups.push({ kind:'heart', x:e.x + e.w/2, y:e.y - 6, vy:-140 }); for (let i = 0; i < 5; i++){ addCoin(); G.pops.push({ x:e.x + 4 + i*5, y:e.y - 4, vy:-200 - i*20, t:0 }); }
+    for (let i = 0; i < 24; i++) G.parts.push({ x:e.x + e.w/2, y:e.y + 10, vx:(Math.random() - .5)*180, vy:-60 - Math.random()*140, life:.8, color:i % 3 ? '#fff6e8' : '#ffd23f', s:i % 4 ? 2 : 3 }); }
   if (e.type === 'armor'){ G.floats.push({ text:'CLANK!', x:e.x + e.w/2, y:e.y - 8, t:0 }); sfx('clank'); G.clanked = (G.clanked || 0) + 1;
     for (let i = 0; i < 8; i++) G.parts.push({ x:e.x + e.w/2, y:e.y + 8, vx:(Math.random() - .5)*150, vy:-90 - Math.random()*120, life:.7, color:i % 2 ? '#9aa0b4' : '#d0d4e4', s:3 }); } }
+// a hidden block appears the moment the hero's head comes up into it from below (it becomes a solid "used" block, pops out a note)
+function revealHidden(p, dy){ const ny = p.y + dy;
+  for (const h of G.hidden){ if (h.shown) continue; const bot = (h.y + 1)*TS;
+    if (p.x < (h.x + 1)*TS && p.x + p.w > h.x*TS && p.y >= bot - .5 && ny < bot && !G.L.map[h.y*G.L.w + h.x]){
+      h.shown = true; G.L.map[h.y*G.L.w + h.x] = 4; addCoin(); G.pops.push({ x:h.x*TS + 3, y:(h.y - 1)*TS, vy:-220, t:0 }); sfx('power'); puff(h.x*TS + 8, h.y*TS + 8, '#fff3a0', 10, 70);
+      G.floats.push({ text:'SECRET!', x:h.x*TS + 8, y:h.y*TS - 6, t:0 }); G.secretsFound = (G.secretsFound || 0) + 1; } } }
 function bonk(tx, ty){ const v = tileAt(tx, ty); G.bumps.push({ tx, ty, t:0 });
   if (v === 3){ G.L.map[ty*G.L.w + tx] = 4; const lucky = (hash(tx + ':' + ty) % 7 === 0) && G.p.hearts < G.maxHearts;
     const chordBlock = !G.chord && hash('c' + tx + ':' + ty) % 9 === 0;
@@ -1409,7 +1622,9 @@ function updateBombs(dt){
   for (const q of G.blasts) q.t += dt; G.blasts = G.blasts.filter(q => q.t < .9); }
 function blast(cx, cy){ const R = TUBA.radius; let ko = 0; sfx('bwaamp'); G.shake = .4; G.bigShake = .3; G.blasts.push({ x:cx, y:cy, t:0 });
   for (let i = 0; i < 26; i++) puff(cx, cy, ['#fff3a0','#ffd23f','#ff8c42','#ffffff','#1a1030'][i%5], 1, 170);
-  for (const e of G.enemies) if (e.alive && !e.sub && Math.hypot(e.x + e.w/2 - cx, e.y + e.h/2 - cy) < R + 8){ kill(e); ko++; }
+  for (const e of G.enemies) if (e.alive && !e.sub && Math.hypot(e.x + e.w/2 - cx, e.y + e.h/2 - cy) < R + 8){ if (e.type === 'megahen') megaHit(e, TUBA.bossDmg, true); else kill(e); ko++; }
+  if (G.base.indoor === 'coop') for (const d of G.base.deco){ if (d.k !== 'hen' || G.megaFrom.has(d) || G.enemies.some(e => e.alive && e.type === 'megahen')) continue; const h = henAt(d, G.t); if (Math.hypot(h.x - cx, 12*TS - 6 - cy) < R + 10) megaHen(d, h); }
+  for (const s of G.eshots) if (!s.dead && (s.kind === 'rose' || s.kind === 'megaegg') && Math.hypot(s.x - cx, s.y - cy) < R + 8) breakSoft(s);
   for (const s of G.eshots) if (!s.dead && (s.kind === 'arrow' || s.kind === 'ball' || s.kind === 'barrel' || s.kind === 'note' || s.kind === 'whole' || s.kind === 'piano' || s.kind === 'antler' || s.kind === 'bubble') && Math.hypot(s.x - cx, s.y - cy) < R + 8){ if (s.kind === 'piano') breakPiano(s, false); else if (s.kind === 'antler') breakAntler(s); else if (s.kind === 'bubble') popBubble(s); else s.dead = 1; }
   const B = G.B; if (B && !B.gone && B.state !== 'intro' && !B.ghost){ const nx = clamp(cx, B.x, B.x + B.w), ny = clamp(cy, B.y, B.y + B.h);
     if (Math.hypot(nx - cx, ny - cy) < R){ damageBoss(TUBA.bossDmg, true); ko++; } }
@@ -1533,6 +1748,9 @@ function draw(){
     x.drawImage(img, tx*TS - cam + jig, ty*TS + by); if (v === 8) twinkle(x, tx*TS - cam + 8, ty*TS + 8, 12);
     if (v === 1 && G.base.sky && ty + 1 < ROWS && !tileAt(tx, ty + 1)) islandUnder(x, tx, ty, cam); }
   if (G.movers.length) drawMovers(x, cam); if (G.cannons.length) drawCannonFx(x, cam);
+  for (const h of G.hidden){ if (h.shown) continue; const sx = h.x*TS - cam; if (sx < -16 || sx > W) continue;   // hidden block hint: a faint sparkle now and then
+    const ph = (G.t + ((h.x*7 + h.y*3) % 10)*.23) % HIDDEN.sparkle; if (ph < .6){ const k = Math.sin(ph/.6*Math.PI), cx = sx + 8 + ((h.x*5) % 7) - 3, cy = h.y*TS + 8 + ((h.x*3) % 5) - 2;
+      x.globalAlpha = .6*k; x.fillStyle = '#fff3a0'; x.fillRect(cx - 1, cy - 3, 2, 6); x.fillRect(cx - 3, cy - 1, 6, 2); x.fillStyle = '#ffffff'; x.fillRect(cx, cy, 1, 1); x.globalAlpha = 1; } }
   // checkpoint & goal
   if (!G.boss){ const st = SP.item('stand'), cx = G.base.cpX - cam, gy = gTopAt(G.base.cpX)*TS; x.drawImage(st, cx, gy - st.height);
     if (G.cpReached){ x.drawImage(SP.item('coin'), cx + 2, gy - st.height - 14); }
@@ -1544,22 +1762,29 @@ function draw(){
   for (const pk of G.pickups){ if (pk.kind === 'tuba'){ const tu = SP.item('tuba'), px = Math.round(pk.x - cam), py = Math.round(pk.y + Math.sin(G.t*5)*1.5);
       glow(x, px, py + 7, 14); x.drawImage(tu, px - 7, py - 1); twinkle(x, px, py + 7, 14); continue; }
     const h = SP.item(pk.kind === 'chord' ? 'chord' : 'heart'); x.drawImage(h, Math.round(pk.x - cam - 3), Math.round(pk.y)); }
+  if (G.chains.length) drawChains(x, cam);
+  for (const e of G.enemies) if (e.type === 'bones' && (e.homeX ??= e.x) - cam > -24 && e.homeX - cam < W + 24) drawBonesProp(x, e, cam);
   // enemies
   for (const e of G.enemies){ if (e.x - cam < -32 || e.x - cam > W + 32) continue;
     let fi = Math.floor(e.t*6) % 2;
+    if (e.type === 'megahen' && e.alive){ drawMegaHen(x, e, cam); continue; }
     if (e.type === 'hedgehog') fi = e.st === 'wind' ? 2 : e.st === 'throw' ? 3 : Math.floor(e.t*4) % 2;
     else if (e.type === 'meep') fi = e.onGround || !e.alive ? 0 : 1; else if (e.type === 'dragon') fi = Math.floor(e.t*5) % 2;
     else if (e.type === 'frog') fi = e.st === 'wind' ? 2 : e.st === 'throw' ? 3 : Math.floor(e.t*1.6) % 2;
     else if (e.type === 'reindeer') fi = e.antlerOut ? 3 : e.st === 'wind' ? 2 : Math.floor(e.t*2) % 2;
     else if (e.type === 'armor') fi = e.st === 'wind' ? 2 : e.st === 'lunge' ? 3 : e.st === 'rest' ? 0 : (e.clk || 0) % 2;
+    else if (e.type === 'tango') fi = e.st === 'wind' ? 2 : e.st === 'throw' ? 3 : Math.floor(e.t*2.2) % 2;
+    else if (e.type === 'bones'){ if (e.sub && e.alive) continue; fi = e.st === 'pop' || !e.alive ? 2 : Math.floor(e.t*5) % 2; }
     else if (e.type === 'skeleton'){ if (e.sub && e.alive) continue; fi = e.st === 'leap' || e.st === 'dive' || !e.alive ? 2 : Math.floor(e.t*5) % 2; }
     const fr = SP.enemyFrames(e.type)[fi], img = e.face > 0 ? fr.l : fr.r;
     if (!e.alive){ x.save(); x.translate(Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h/2)); x.scale(1, -1); x.drawImage(img, -Math.round(img.width/2), -Math.round(img.height/2)); x.restore(); continue; }
     if (e.flash > 0 && Math.floor(G.t*30) % 2) continue;
     const shake = e.st === 'wind' ? (Math.floor(G.t*30) % 2 ? 1 : -1) : 0, ex = Math.round(e.x - cam - (img.width - e.w)/2) + shake;
-    x.drawImage(img, ex, Math.round(e.y + e.h - img.height)); if (G.base.pirate) pirateHat(x, e, ex, Math.round(e.y + e.h - img.height), img);
+    if (e.type === 'tango') x.globalAlpha = .82 + Math.sin(G.t*9)*.08;
+    x.drawImage(img, ex, Math.round(e.y + e.h - img.height)); x.globalAlpha = 1; if (G.base.pirate) pirateHat(x, e, ex, Math.round(e.y + e.h - img.height), img);
     if (e.type === 'frog' && e.st === 'wind'){ const py = Math.round(e.y + e.h - img.height) - 12 - Math.round(Math.sin(G.t*20)); x.drawImage(SP.item('piano'), Math.round(e.x - cam + e.w/2 - 8), py);   // piano held overhead
       if (e.mark) landMarker(x, e.mark, cam, 1 - e.stT/PIANO.wind); alertBubble(x, Math.round(e.x - cam + e.w/2), py - 1, e.stT); }
+    else if (e.type === 'tango' && e.st === 'wind'){ if (e.mark && e.mark.y != null) landMarker(x, e.mark, cam, 1 - e.stT/TANGO.wind); alertBubble(x, Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h - img.height) - 4, e.stT); }
     else if (e.st === 'wind') alertBubble(x, Math.round(e.x - cam + e.w/2), Math.round(e.y + e.h - img.height) - 4, e.stT);
     if (e.ri != null && e.st === 'wind') drawBubbleAt(x, Math.round(e.x - cam + e.w/2 + e.face*(e.w/2 + 3)), Math.round(e.y + 6), Math.round(2 + (1 - e.stT/BUBBLE.wind)*4));   // the bubble swells at the raider's mouth
     if (e.ri != null && e.type === 'hedgehog'){ const ey = Math.round(e.y + e.h - img.height); x.fillStyle = '#1a1030'; x.fillRect(ex + 3, ey - 2, 9, 3); x.fillStyle = '#3a6ee8'; x.fillRect(ex + 4, ey - 1, 7, 1); } }   // a little sailor cap
@@ -1590,6 +1815,8 @@ function draw(){
       case 'piano': { if (s.ty != null) landMarker(x, { x:s.tx, y:s.ty }, cam, 1 + s.t/s.T); x.save(); x.translate(sx, sy); x.rotate(Math.sin(s.t*7)*.35); x.drawImage(SP.item('piano'), -8, -6); x.restore(); break; }
       case 'antler': { x.save(); x.translate(sx, sy); x.rotate(s.t*14*s.dir); x.drawImage(SP.item('antler', { A:'#ecd6a4' }), -6, -4); x.restore(); break; }
       case 'bubble': drawBubbleAt(x, sx, sy, s.r); break;
+      case 'rose': { if (s.ty != null) landMarker(x, { x:s.tx, y:s.ty }, cam, 1 + s.t/s.T); x.save(); x.translate(sx, sy); x.rotate(s.rot || 0); x.drawImage(SP.item('rose'), -3, -4); x.restore(); break; }
+      case 'megaegg': { if (s.ty != null) landMarker(x, { x:s.tx, y:s.ty }, cam, 1 + s.t/s.T); x.save(); x.translate(sx, sy); x.rotate(s.t*6); x.fillStyle = '#1a1030'; x.fillRect(-4, -5, 8, 10); x.fillRect(-5, -3, 10, 7); x.fillStyle = '#fff6e8'; x.fillRect(-3, -4, 6, 8); x.fillRect(-4, -2, 8, 5); x.fillStyle = '#ffffff'; x.fillRect(-2, -3, 2, 2); x.restore(); break; }
       case 'orb': x.fillStyle = '#9b5de5'; x.fillRect(sx - 3, sy - 3, 6, 6); x.fillStyle = '#ffffff'; x.fillRect(sx - 1, sy - 2, 2, 2); break;
       default: x.fillStyle = '#1a1030'; x.fillRect(sx - 5, sy - 5, 10, 10); x.fillStyle = '#9aa0b4'; x.fillRect(sx - 4, sy - 4, 8, 8); x.fillStyle = '#d0d4e4'; x.fillRect(sx - 3, sy - 3, 3, 2);
     } }
@@ -1724,6 +1951,37 @@ function drawPortDeco(x, d, cam){ const t = G.t, k = '#1a1030';
 function drawPushHint(x, cam){ const p = G.p; if (p.dead || p.clear || p.x - cam > 22 || Math.floor(G.t*6) % 2) return; const y = Math.round(p.y + 6);
   for (const o of [2, 7]){ x.fillStyle = '#1a1030'; x.fillRect(o - 1, y - 1, 4, 9); x.fillStyle = '#ffd23f'; x.fillRect(o, y, 1, 7); x.fillRect(o + 1, y + 1, 1, 5); x.fillRect(o + 2, y + 2, 1, 3); } }
 // where a piano will land: a dark shadow on the floor that grows and blinks faster as it gets close
+function drawChains(x, cam){   /* a ceiling bracket, a swinging chain of links and a spiked iron ball, plus its shadow on the floor */
+  for (const c of G.chains){ const ax = Math.round(c.x - cam); if (ax < -c.len - 20 || ax > W + c.len + 20) continue; const b = chainBall(c), bx = Math.round(b.x - cam), by = Math.round(b.y);
+    x.fillStyle = '#1a1030'; x.fillRect(ax - 6, c.y - 4, 12, 5); x.fillStyle = '#6a6478'; x.fillRect(ax - 5, c.y - 3, 10, 3);
+    const n = Math.floor(c.len/6); for (let i = 1; i < n; i++){ const k = i/n, lx = Math.round(c.x - cam + (b.x - c.x)*k), ly = Math.round(c.y + (b.y - c.y)*k);
+      x.fillStyle = '#1a1030'; x.fillRect(lx - 2, ly - 2, 5, 5); x.fillStyle = i % 2 ? '#e4e0f0' : '#a8a4c0'; i % 2 ? x.fillRect(lx - 1, ly - 1, 2, 3) : x.fillRect(lx - 1, ly - 1, 3, 2); }
+    const fy = gTopAt(b.x)*TS, sh = Math.max(2, 9 - Math.round((fy - by)/14)); x.globalAlpha = .3; x.fillStyle = '#1a1030'; x.fillRect(bx - sh, fy - 2, sh*2, 2); x.globalAlpha = 1;
+    x.fillStyle = '#1a1030'; for (const [dx, dy] of [[0, -9], [0, 9], [-9, 0], [9, 0], [-6, -6], [6, -6], [-6, 6], [6, 6]]) x.fillRect(bx + dx - 1, by + dy - 1, 3, 3);   // spikes
+    x.fillStyle = '#ffffff'; for (const [dx, dy] of [[0, -9], [0, 9], [-9, 0], [9, 0], [-6, -6], [6, -6], [-6, 6], [6, 6]]) x.fillRect(bx + dx, by + dy, 1, 1);
+    x.fillStyle = '#1a1030'; x.fillRect(bx - 6, by - 5, 12, 10); x.fillRect(bx - 5, by - 6, 10, 12);
+    x.fillStyle = '#9c98b4'; x.fillRect(bx - 5, by - 4, 10, 8); x.fillRect(bx - 4, by - 5, 8, 10); x.fillStyle = '#6a6680'; x.fillRect(bx - 4, by + 2, 8, 2); x.fillStyle = '#f0f0ff'; x.fillRect(bx - 3, by - 4, 3, 2); x.fillRect(bx - 3, by - 2, 1, 1); } }
+function drawBonesProp(x, e, cam){   /* where a Rattlebones hides: a treasure chest (lid pops open) or a crack in the floor stones; shakes + "!" while it rattles */
+  const hx = Math.round(e.homeX - cam + 6), fy = Math.round(e.baseY + e.h), rat = e.alive && e.st === 'rattle', sh = rat ? (Math.floor(G.t*30) % 2 ? 1 : -1) : 0, open = !e.alive || !e.sub;
+  if (e.hide === 'chest'){ const cx = hx - 8 + sh, cy = fy - 10;
+    x.fillStyle = '#1a1030'; x.fillRect(cx - 1, cy - 1, 18, 12); x.fillStyle = '#8a4a1c'; x.fillRect(cx, cy, 16, 10); x.fillStyle = '#ffd23f'; x.fillRect(cx, cy + 3, 16, 1); x.fillRect(cx + 7, cy + 2, 2, 4);
+    if (open){ x.fillStyle = '#1a1030'; x.fillRect(cx - 1, cy - 8, 18, 6); x.fillStyle = '#a85a24'; x.fillRect(cx, cy - 7, 16, 4); x.fillStyle = '#2a1a10'; x.fillRect(cx + 1, cy - 1, 14, 2); }
+    else { x.fillStyle = '#1a1030'; x.fillRect(cx - 1, cy - 5 - (rat ? Math.floor(G.t*12) % 2 : 0), 18, 5); x.fillStyle = '#a85a24'; x.fillRect(cx, cy - 4 - (rat ? Math.floor(G.t*12) % 2 : 0), 16, 3); } }
+  else { x.fillStyle = '#1a1030'; x.fillRect(hx - 8 + sh, fy - 1, 16, 1); x.fillRect(hx - 5, fy - 2, 3, 1); x.fillRect(hx + 2, fy - 2, 4, 1); if (open){ x.fillStyle = '#2a2236'; x.fillRect(hx - 6, fy - 2, 12, 2); }
+    if (rat) for (let i = 0; i < 3; i++){ x.fillStyle = '#9a94a8'; x.fillRect(hx - 6 + i*5 + sh, fy - 3 - (Math.floor(G.t*16 + i) % 2), 2, 2); } }
+  if (rat) alertBubble(x, hx, fy - 16, e.stT); }
+function drawMegaHen(x, e, cam){   /* Mega Hen: grows out of a hen, "!" + marker before an egg or a stomp jump, stars while dizzy, a name tag + hit pips */
+  const fr = SP.enemyFrames('megahen'), fi = e.st === 'wind' ? 2 : e.st === 'leap' ? 3 : e.st === 'grow' || e.st === 'dizzy' ? 0 : (e.clk || 0) % 2, img = e.face > 0 ? fr[fi].l : fr[fi].r;
+  const cx = Math.round(e.x - cam + e.w/2), fy = Math.round(e.y + e.h);
+  if (e.st === 'wind' && e.mark && e.mark.y != null) landMarker(x, e.mark, cam, 1 - e.stT/(e.next === 'egg' ? MEGA.wind : MEGA.jumpWind));
+  if (e.st === 'leap' && e.mark) landMarker(x, e.mark, cam, 1.2);
+  if (e.st === 'leap'){ const fl = gTopAt(e.x + e.w/2)*TS; x.globalAlpha = .35; x.fillStyle = '#1a1030'; x.fillRect(cx - 20, fl - 2, 40, 2); x.fillRect(cx - 16, fl - 3, 32, 1); x.globalAlpha = 1; }   // her shadow under her
+  if (!(e.flash > 0 && Math.floor(G.t*30) % 2)){ const k = e.st === 'grow' ? .45 + .55*(1 - e.stT/MEGA.grow) : 1, sh = e.st === 'wind' ? (Math.floor(G.t*30) % 2 ? 1 : -1) : 0;
+    x.save(); x.translate(cx + sh, fy); x.scale(2*k, 2*k); x.drawImage(img, -Math.round(img.width/2), -img.height); x.restore(); }
+  const ty = fy - 54; if (e.st === 'wind') alertBubble(x, cx + e.face*30, fy - 40, e.stT);   // the "!" pops up in front of her beak
+  if (e.st === 'dizzy') for (let i = 0; i < 3; i++){ const a = G.t*6 + i*2.1; x.fillStyle = '#ffd23f'; x.fillRect(Math.round(cx + Math.cos(a)*18) - 1, Math.round(fy - 46 + Math.sin(a)*3) - 1, 3, 3); }
+  const nm = 'MEGA HEN'; SP.text(x, nm, cx - Math.round(SP.textWidth(nm)/2), ty - 16, '#ffd23f');
+  for (let i = 0; i < MEGA.hp; i++){ x.fillStyle = '#1a1030'; x.fillRect(cx - MEGA.hp*3 + i*6, ty - 8, 5, 4); x.fillStyle = i < e.hp ? '#e83a4a' : '#5a5668'; x.fillRect(cx - MEGA.hp*3 + i*6 + 1, ty - 7, 3, 2); } }
 function landMarker(x, m, cam, k){ const mx = Math.round(m.x - cam), my = m.y, hw = Math.round(4 + Math.min(1.9, k)*4); if (k > 1.6 && Math.floor(G.t*20) % 2) return;
   x.globalAlpha = .55; x.fillStyle = '#1a1030'; x.fillRect(mx - hw, my - 2, hw*2, 2); x.fillRect(mx - hw + 2, my - 3, hw*2 - 4, 1); x.globalAlpha = 1;
   x.fillStyle = Math.floor(G.t*8) % 2 ? '#ff3a4a' : '#ffd23a'; x.fillRect(mx - hw, my - 1, hw*2, 1); x.fillRect(mx - hw, my - 4, 1, 3); x.fillRect(mx + hw - 1, my - 4, 1, 3);   // blinking floor bracket where it will land
@@ -1739,7 +1997,7 @@ function drawHen(x, hx, fy, face, peck){ const k = '#1a1030', bx = Math.round(hx
 }
 const BAWK = { text:'BAWK!', show:1.1 };   // a hen's cluck shows a readable speech bubble (drawn on top of everything, after the warm coop light)
 function drawHenBubbles(x, cam){ const t = G.t, k = '#1a1030';
-  for (const d of G.base.deco){ if (d.k !== 'hen' || d.cl == null || t < d.cl || t - d.cl > BAWK.show) continue;
+  for (const d of G.base.deco){ if (d.k !== 'hen' || G.megaFrom?.has(d) || d.cl == null || t < d.cl || t - d.cl > BAWK.show) continue;
     const a = t - d.cl, hx = Math.round(henAt(d, t).x - cam), tw = SP.textWidth(BAWK.text), bw = tw + 8, bh = 13, pop = a < .12 ? Math.round((.12 - a)*25) : 0;
     const bx = Math.max(2, Math.min(W - bw - 2, hx - Math.round(bw/2))), by = 12*TS - 41 + pop, tip = Math.max(bx + 4, Math.min(bx + bw - 6, hx - 1));
     if (hx < -30 || hx > W + 30 || (a > BAWK.show - .25 && Math.floor(a*20) % 2)) continue;
@@ -1830,7 +2088,7 @@ function drawSpecialDeco(x, cam){ const t = G.t, ws = G.base.indoor === 'worksho
       else if (d.k === 'nests'){ const fy = 12*TS; for (let px = x0 + 4, i = 0; px < x1 - 18; px += 22, i++){ x.fillStyle = k; x.fillRect(px, fy - 20, 20, 20); x.fillStyle = '#a8703c'; x.fillRect(px + 1, fy - 19, 18, 18);   // nesting boxes on the floor
           x.fillStyle = '#2a1608'; x.fillRect(px + 3, fy - 16, 14, 11); x.fillStyle = '#e8c050'; x.fillRect(px + 3, fy - 9, 14, 4);
           if (i % 2){ drawHen(x, px + 10, fy - 6, 1, false, false); } else { x.fillStyle = '#fff6e8'; x.fillRect(px + 6, fy - 11, 4, 5); x.fillStyle = '#e0b080'; x.fillRect(px + 11, fy - 10, 4, 4); } } }
-      else if (d.k === 'hen'){ const h = henAt(d, t), sx = h.x - cam; if (sx < -20 || sx > W + 20) continue; drawHen(x, sx, 12*TS, h.face, h.peck); }
+      else if (d.k === 'hen' && !G.megaFrom?.has(d)){ const h = henAt(d, t), sx = h.x - cam; if (sx < -20 || sx > W + 20) continue; drawHen(x, sx, 12*TS, h.face, h.peck); }
       else if (d.k === 'feeder'){ const cx = Math.round(d.x*TS - cam); if (cx < -30 || cx > W + 30) continue;   // hanging grain feeder over a gap, grain trickling down
         x.fillStyle = '#1a1030'; x.fillRect(cx, 0, 1, d.y1 - 18); x.fillRect(cx - 9, d.y1 - 18, 18, 16); x.fillStyle = '#b8bcc8'; x.fillRect(cx - 8, d.y1 - 17, 16, 14); x.fillStyle = '#e0e4ec'; x.fillRect(cx - 6, d.y1 - 17, 3, 14);
         x.fillStyle = '#1a1030'; x.fillRect(cx - 12, d.y1 - 3, 24, 4); x.fillStyle = '#9aa0b4'; x.fillRect(cx - 11, d.y1 - 2, 22, 2);
@@ -2003,7 +2261,7 @@ function drawOverworld(canvas, worlds, opts = {}){
   return hits;
 }
 
-window.PQGame = { SPECIAL, SHIP, MOAT, SKEL, BUBBLE, ARMOR, audio:{ ctx:() => ac(), want:wantAudio, status:audioStatus, test:testSound, reset:resetAudio, onChange(f){ AUD.listeners.add(f); return () => AUD.listeners.delete(f); } },
+window.PQGame = { SPECIAL, SHIP, MOAT, SKEL, BUBBLE, ARMOR, TANGO, BONES, CHAIN, MEGA, HIDDEN, audio:{ ctx:() => ac(), want:wantAudio, status:audioStatus, test:testSound, reset:resetAudio, onChange(f){ AUD.listeners.add(f); return () => AUD.listeners.delete(f); } },
   finale:{ start:on => Finale.start(on), stop:() => Finale.stop(), get playing(){ return !!Finale.timer; } }, start, stop, quit, togglePause, drawOverworld, themeOf, THEMES:Object.keys(THEMES), stats, get running(){ return !!G; },
-  debug:{ get G(){ return G; }, get audio(){ return AC; }, get music(){ return { playing:!!Music.timer, wiz:!!(Music.song && Music.song.wiz), step:Music.step }; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); }, draw(){ if (G) draw(); } } };
+  debug:{ get G(){ return G; }, reachSolver, addHiddenBlocks, get audio(){ return AC; }, get music(){ return { playing:!!Music.timer, wiz:!!(Music.song && Music.song.wiz), step:Music.step }; }, deaths, input, run(n){ for (let i = 0; i < n && G && !G.done; i++){ if (!G.paused) step(1/60); } }, step(dt){ if (G && !G.done && !G.paused) step(dt); }, draw(){ if (G) draw(); } } };
 })();
