@@ -15,7 +15,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css?v=29">
+<link rel="stylesheet" href="styles.css?v=30">
 </head>
 <body>
 <div id="app">
@@ -138,11 +138,11 @@
   </div></div>
 </div>
 
-<!-- Finale: story scene with Mr. Kurilla, then the ending parade (finale.js) -->
+<!-- Story cutscenes (opening story, boss talk, wizard showdown, reveal) + the ending parade (finale.js) -->
 <div id="story" class="cine" hidden>
   <div class="cine-stage"><canvas id="story-canvas" width="256" height="224" aria-label="story scene"></canvas></div>
-  <div class="talk" id="talk" role="button" tabindex="0" aria-live="polite"><div class="talk-who" id="talk-who"></div><div class="talk-text" id="talk-text"></div><div class="talk-next" id="talk-next">▼</div></div>
-  <div class="cine-b" id="story-go" hidden><button class="btn btn-big btn-pink" id="story-fight">⚔️ Battle Mr. Kurilla!</button><button class="btn btn-wide btn-ghost cine-later" id="story-later">🗺️ Not yet, back to map</button></div>
+  <div class="talk" id="talk" role="button" tabindex="0" aria-live="polite" aria-label="tap to continue"><canvas id="talk-canvas" width="180" height="60" aria-hidden="true"></canvas><div class="sr-only"><span class="talk-who" id="talk-who"></span>: <span class="talk-text" id="talk-text"></span></div></div>
+  <div class="cine-b" id="story-go" hidden><button class="btn btn-big btn-pink" id="story-fight">⚔️ Battle the Wizard!</button><button class="btn btn-wide btn-ghost cine-later" id="story-later">🗺️ Not yet, back to map</button></div>
   <button class="cine-skip" id="story-skip">Skip ⏭</button>
 </div>
 <div id="finale" class="cine" hidden>
@@ -162,9 +162,9 @@
 <div id="toast" class="toast" hidden></div>
 <div id="fx" class="fx" aria-hidden="true"></div>
 
-<script src="sprites.js?v=29"></script>
-<script src="game.js?v=29"></script>
-<script src="finale.js?v=29"></script>
-<script src="app.js?v=29"></script>
+<script src="sprites.js?v=30"></script>
+<script src="game.js?v=30"></script>
+<script src="finale.js?v=30"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>

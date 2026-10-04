@@ -299,9 +299,13 @@ Y:'10001 10001 01010 00100 00100 00100 00100',Z:'11111 00001 00010 00100 01000 1
 9:'01110 10001 10001 01111 00001 00010 01100','!':'00100 00100 00100 00100 00100 00000 00100','-':'00000 00000 00000 11111 00000 00000 00000',
 ':':'00000 01100 01100 00000 01100 01100 00000','.':'00000 00000 00000 00000 00000 01100 01100','x':'00000 00000 10001 01010 00100 01010 10001',
 '?':'01110 10001 00001 00010 00100 00000 00100',"'":'00100 00100 01000 00000 00000 00000 00000','/':'00001 00010 00010 00100 01000 01000 10000',
-'+':'00000 00100 00100 11111 00100 00100 00000',',':'00000 00000 00000 00000 01100 00100 01000',' ':'00000 00000 00000 00000 00000 00000 00000'
+'+':'00000 00100 00100 11111 00100 00100 00000','(':'00010 00100 01000 01000 01000 00100 00010',')':'01000 00100 00010 00010 00010 00100 01000','"':'01010 01010 10100 00000 00000 00000 00000',
+'&':'01100 10010 10100 01000 10101 10010 01101',',':'00000 00000 00000 00000 01100 00100 01000',' ':'00000 00000 00000 00000 00000 00000 00000'
 };
 const FONT = {}; for (const ch in FONT_SRC) FONT[ch] = FONT_SRC[ch].split(' ').map(r => parseInt(r, 2));
+FONT['\u2019'] = FONT["'"]; FONT['\u2018'] = FONT["'"]; FONT['\u201c'] = FONT['\u201d'] = FONT['"']; FONT['\u2026'] = FONT['.'];
+// accents (v30 story text: OLÉ, DÉJÀ VU, SEÑOR): drawn in the 2 pixel rows ABOVE the capital letter
+const ACCENT = { '\u0301':[[3, -2], [2, -1]], '\u0300':[[1, -2], [2, -1]], '\u0303':[[1, -2], [2, -2], [0, -1], [3, -1]], '\u0308':[[1, -1], [3, -1]], '\u0302':[[2, -2], [1, -1], [3, -1]] };
 
 // ---- rendering helpers ----
 function grid(rows){ const w = Math.max(...rows.map(r => r.length)); return { w, h:rows.length, rows:rows.map(r => r.padEnd(w, '.')) }; }
@@ -414,14 +418,16 @@ function snare(){
 }
 function noteShot(color){ const key = 'shot-'+color; return cache[key] || (cache[key] = render(["...kkk", "...kwwk", "...kwkwk", "...kw.kk", ".kkkw", "kwwwwk", "kwwwwk", ".kkkk"], { w:color })); }
 function text(ctx, str, x, y, color = '#fff', shadow = '#1a1030', scale = 1){
-  str = String(str).toUpperCase();
+  str = String(str).normalize('NFC').toUpperCase();
   const draw = (ox, oy, col) => { ctx.fillStyle = col; let cx = x+ox;
-    for (const ch of str){ const g = FONT[ch] || FONT['?'];
+    for (const ch of str){ let g = FONT[ch], marks = null;
+      if (!g){ const d = ch.normalize('NFD'); if (d.length > 1 && FONT[d[0]]){ g = FONT[d[0]]; marks = d.slice(1); } else g = FONT['?']; }
       for (let j = 0; j < 7; j++) for (let i = 0; i < 5; i++) if (g[j] & (16 >> i)) ctx.fillRect(cx + i*scale, y + oy + j*scale, scale, scale);
+      if (marks) for (const m of marks) for (const [i, j] of ACCENT[m] || []) ctx.fillRect(cx + i*scale, y + oy + j*scale, scale, scale);
       cx += 6*scale; } };
   if (shadow) draw(scale, scale, shadow); draw(0, 0, color);
 }
-const textWidth = (s, scale = 1) => String(s).length * 6 * scale - scale;
+const textWidth = (s, scale = 1) => [...String(s).normalize('NFC')].length * 6 * scale - scale;
 
 window.PQSprites = { PAL, HAIRS, INSTR:Object.keys(INSTR), NOTE_COLORS, ENEMIES:Object.keys(EN), MIX_ENEMIES:Object.keys(MIX), BOSSES:Object.keys(BOSS),
   heroFrames, enemyFrames, bossFrames, item, noteShot, text, textWidth, render, wizard, snare };

@@ -75,6 +75,8 @@ function load(keep){
   if (!HAIR_NAME[g.hair]) g.hair = 'short';
   if (!S.arcade){ S.arcade = 3; if (g.lives < START_LIVES) g.lives = START_LIVES; g.score = 0; } // v3 migration: fresh credit of lives
   for (const p of PIECES) gw(p.id);
+  // v30: storySeen (opening story). Older saves that already have progress count as seen, so returning players go straight to the map.
+  if (typeof S.storySeen !== 'boolean') S.storySeen = g.coins > 0 || PIECES.some(p => { const w = gw(p.id); return w.boss > 0 || w.cleared.some(Boolean); });
 }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){ memOnly = true; } }
 
@@ -340,16 +342,17 @@ function playStage(id, i, bossHp){
       const celebrate = !firstWin ? null : nxtWorld ? 'unlock' : PIECES.every(q => gw(q.id).boss > 0) ? 'final' : null;
       if (celebrate === 'unlock'){ S.game.current = nxtWorld.id; save(); }   // the hero walks to the new island on the map
       const next = i < 3 ? { id, i:i+1 } : null;
-      back(`<div class="result"><div class="big">${i===3?'🏰 BOSS DEFEATED!':'🚩 STAGE CLEAR!'}</div><p><b>${esc(p.title)}</b> · ${i===3?esc(p.boss):`Stage ${i+1}`}<br>🪙 ${r.coins} note coins · ❤️ ${r.lives} lives</p>${r.tuba > 0 && i < 3 ? `<p>💥 Your <b>GIANT TUBA</b> (${r.tuba} bass bomb${r.tuba>1?'s':''}) comes with you to the next stage in this world!</p>` : ''}
+      const html = `<div class="result"><div class="big">${i===3?'🏰 BOSS DEFEATED!':'🚩 STAGE CLEAR!'}</div><p><b>${esc(p.title)}</b> · ${i===3?esc(p.boss):`Stage ${i+1}`}<br>🪙 ${r.coins} note coins · ❤️ ${r.lives} lives</p>${r.tuba > 0 && i < 3 ? `<p>💥 Your <b>GIANT TUBA</b> (${r.tuba} bass bomb${r.tuba>1?'s':''}) comes with you to the next stage in this world!</p>` : ''}
         ${i===3 ? (nxtWorld ? `<p>🗺️ <b>World ${nxtWorld.lv}: ${esc(nxtWorld.title)}</b> is open!</p>` : '<p>🏆 You beat every world! Replay any stage to chase a high score.</p>') : i===2 ? '<p>🏰 The Boss Castle is open!</p>' : ''}
         ${badgeHTML(nb)}${next ? `<button class="btn btn-big btn-yellow" data-play="${next.id}" data-stage="${next.i}">▶ ${next.i===3?'Storm the castle':next.i===0?`Go to World ${P[next.id].lv}`:`Stage ${next.i+1}`}</button>` : ''}
         ${i === 3 ? `<button class="btn btn-big btn-yellow" id="res-ok">${celebrate === 'unlock' ? `🗺️ See World ${nxtWorld.lv} on the map ➜` : celebrate === 'final' ? (S.game.finalBossBeaten ? '🗺️ See your finished map ➜' : '🧙 Wait... someone’s coming! ➜') : '🗺️ Back to map'}</button>`
-                  : `<button class="btn btn-wide btn-ghost" id="res-ok">🗺️ Back to map</button>`}</div>`);
-      const ok = $('#res-ok'); if (ok) ok.onclick = closeModal;
-      if (i === 3){ const to = celebrate === 'unlock' ? worldIdx(nxtWorld.id) : celebrate === 'final' ? PIECES.length - 1 : worldIdx(id);
-        modalClose = () => celebrate === 'final' && !S.game.finalBossBeaten ? openStory(true) : celebrate ? mapCelebrate(celebrate, to) : (renderAll(), focusIsland(to)); } },
+                  : `<button class="btn btn-wide btn-ghost" id="res-ok">🗺️ Back to map</button>`}</div>`;
+      const result = () => { if (i === 3) openModal(html); const ok = $('#res-ok'); if (ok) ok.onclick = closeModal;
+        if (i === 3){ const to = celebrate === 'unlock' ? worldIdx(nxtWorld.id) : celebrate === 'final' ? PIECES.length - 1 : worldIdx(id);
+          modalClose = () => celebrate === 'final' && !S.game.finalBossBeaten ? openStory(true) : celebrate ? mapCelebrate(celebrate, to) : (renderAll(), focusIsland(to)); } };
+      if (i === 3){ back(); bossTalk((p.world || {}).boss, result); } else { back(html); result(); } },
     onGameOver:r => { S.game.coins += r.coins; S.game.lives = 0; tubaTally(r); checkBadges(); save(); sfx.over(); back(); continueScreen(id, i, r.bossHp); },
-    onQuit:r => { S.game.coins += r.coins; S.game.score += r.coins; tubaTally(r); if (r.tuba > 0) tubaCarry = { id, ammo:r.tuba }; const nb = checkBadges(); save(); back(); if (nb.length) toast('🏅 New badge: ' + nb.map(b => esc(b.n)).join(', ')); else if (i === 4) toast(`🧙 Mr. Kurilla is waiting for you in World ${p.lv}. Try again anytime!`); },
+    onQuit:r => { S.game.coins += r.coins; S.game.score += r.coins; tubaTally(r); if (r.tuba > 0) tubaCarry = { id, ammo:r.tuba }; const nb = checkBadges(); save(); back(); if (nb.length) toast('🏅 New badge: ' + nb.map(b => esc(b.n)).join(', ')); else if (i === 4) toast(`🧙 The wizard is waiting for you in World ${p.lv}. Try again anytime!`); },
   });
 }
 function continueScreen(id, i, bossHp){
@@ -373,39 +376,78 @@ const NUM_WORD = ['zero','one','two','three','four','five','six','seven','eight'
 const plain = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9 .!?-]/g, '').trim();
 const pauseMap = () => { closeModal(); hideMapBanner(); clearTimeout(mapRaf); cancelAnimationFrame(mapRaf); mapRaf = 0; mapFx = null; document.body.classList.add('in-game'); };
 const resumeMap = () => { document.body.classList.remove('in-game'); renderAll(); startMapLoop(); };
-let story = null, fin = null, storyFirst = false;   // storyFirst: opened straight from the last world's first boss win
-function storyLines(){ const n = NUM_WORD[PIECES.length] || PIECES.length; return [
-  { who:'kurilla', t:`Well, well, well... look who made it through all ${n} worlds!` },
-  { who:'hero', t:'Mr. Kurilla?! Why are you dressed like a wizard?' },
-  { who:'kurilla', t:`I am the Maestro of this quest! You beat all ${n} worlds... but to win the <b>GOLDEN SNARE DRUM</b>, you have to beat ME!`, drum:true },
-  { who:'hero', t:'Bring it on! I’ve been practicing!', cheer:true },
-  { who:'kurilla', t:'Let’s see if you can keep the beat! Ready... and a one, two, three, four!' } ]; }
+let story = null, fin = null, storyFirst = false;   // story: the cutscene now playing. storyFirst: the showdown opened straight from the last world's first boss win
+// v30 story text (approved by Steve Kurilla, Oct 4 2026). Shown word for word.
+const INTRO_PAGES = [
+  { scene:'intro-room', t:"The night before the big winter concert, something terrible happened in the band room..." },
+  { scene:'intro-empty', t:"The GOLDEN SNARE DRUM vanished! Without its beat, the whole band falls apart." },
+  { scene:'intro-wizard', t:"A mysterious purple wizard was seen flying off with it, deep into five wild worlds." },
+  { scene:'intro-hero', t:"Grab your instrument, hero. Practice hard, play loud, and bring back the beat!" } ];
+const BOSS_TALK = {
+  valkyrie:{ who:'Skadi the Valkyrie', color:'#7cc0ff', t:"You out-sang me?! Fine... the drum's not here. The wizard took it to a farm. Something about chickens?" },
+  cluckzilla:{ who:'Admiral Cluckzilla', color:'#ffb347', t:"BAWK! No drum in this barn! The wizard flew north, where it's snowing... and jingling." },
+  santa:{ who:'Santa the Barbarian', color:'#ff6b6b', t:"Ho ho... oh no. The drum's not on my list! I saw the wizard sail off toward the sky." },
+  dragon:{ who:'Déjà Vu Dragon', color:'#9ef01a', t:"You beat me? You beat me? (Déjà vu...) The drum is in the haunted castle. Hope you like tango!" },
+  spectro:{ who:'Señor Spectro', color:'#c9b6ff', t:"Olé! You have rhythm, amigo! The wizard waits just beyond. Go... if you dare!" } };
+const SHOWDOWN_PAGES = [{ scene:'showdown', who:'Purple Wizard', color:'#b48cff', t:"So, you made it. I took the Golden Snare Drum to see who would practice the hardest... Show me what you've got!" }];
+const REVEAL_PAGES = [{ scene:'reveal', who:'Mr. Kurilla', color:'#ffd23f', t:"It was me all along, Mr. Kurilla! You practiced, you never gave up, and that's what real musicians do. The concert is saved!", wait:1.5 }];
+const TYPE_CPS = 45, talkC = $('#talk-canvas');
+const pageLen = (L, cols) => PQFinale.talkLines(L.t, cols).reduce((a, l) => a + [...l].length + 1, 0);
+function talkLayout(){   // pixel-perfect box (3x when there's room, else 2x) sized to fit the longest page of this cutscene, so it never jumps
+  if (!story) return; const box = $('#talk'), inner = Math.max(120, box.clientWidth - 8), side = matchMedia('(orientation:landscape) and (max-height:520px)').matches;
+  const room = side ? innerHeight - 120 : innerHeight - $('.cine-stage').getBoundingClientRect().bottom - 12 - 70, named = story.pages.some(L => L.who);
+  let pick = null; for (const sc of [3, 2]){ const cw = Math.floor(inner/sc), cols = Math.floor((cw - 10 + 1)/6), rows = Math.max(3, ...story.pages.map(L => PQFinale.talkLines(L.t, cols).length)), ch = 5 + (named ? 11 : 0) + rows*10 + 6;
+    pick = { sc, cw, cols, ch }; if (cols >= 16 && ch*sc + 8 <= room) break; }
+  const { sc, cw, cols, ch } = pick; talkC.width = cw; talkC.height = ch; talkC.style.width = cw*sc + 'px'; talkC.style.height = ch*sc + 'px'; story.cols = cols; story.scale = sc; story.total = pageLen(story.pages[story.n] || { t:'' }, cols); if (story.shown > story.total) story.shown = story.total; }
+function talkTick(now){ if (!story) return; story.raf = requestAnimationFrame(talkTick);
+  const dt = Math.min(.1, (now - (story.last || now))/1000); story.last = now; talkAdvance(dt); }
+function talkAdvance(dt){ story.t += dt; story.pt += dt;
+  const L = story.pages[story.n]; if (!L || $('#talk').hidden) return;
+  if (story.pt >= (L.wait || 0)) story.shown = Math.min(story.total, story.shown + dt*TYPE_CPS*(story.fast ? 4 : 1));
+  const done = story.shown >= story.total; story.ctl.talk(!done && story.pt >= (L.wait || 0));
+  PQFinale.talkBox(talkC, { who:L.who, color:L.color, text:L.t, shown:Math.floor(story.shown), done, t:story.t, cols:story.cols }); }
+function playCut(kind, pages, onDone, after){   // after(): what to show when the words are done (default: close + onDone)
+  pauseMap(); if (story) endCut();
+  const ctl = PQFinale.scene($('#story-canvas'), { inst:S.game.inst || 'sax', hair:S.game.hair, boss:kind === 'boss' ? pages[0].boss : null });
+  $('#story').hidden = false; $('#talk').hidden = false; $('#story-go').hidden = true; $('#story-skip').hidden = false; $('#story').dataset.kind = kind;
+  story = { kind, ctl, pages, n:-1, shown:0, total:0, t:0, pt:0, cols:28, ready:false, onDone, after, raf:0, last:0,
+    next(){ if (this.ready) return; const L = this.pages[this.n];
+      if (L && this.shown < this.total){ this.shown = this.total; this.pt = Math.max(this.pt, L.wait || 0); return; }   // tap: finish the typing first
+      if (this.n >= this.pages.length - 1) return this.done();
+      const N = this.pages[++this.n]; ctl.set(N); this.shown = 0; this.pt = 0; this.total = pageLen(N, this.cols);
+      $('#talk-who').textContent = N.who || 'Story'; $('#talk-text').textContent = N.t; sfx.blip(); },
+    done(){ if (this.ready) return; this.ready = true; this.shown = this.total; if (this.after) this.after(this); else { endCut(); if (this.onDone) this.onDone(); } } };
+  talkLayout(); story.next(); story.raf = requestAnimationFrame(talkTick); setTimeout(() => { if (story && !story.ready) $('#talk').focus({ preventScroll:true }); }, 50);
+}
+function endCut(){ if (!story) return; story.ctl.stop(); cancelAnimationFrame(story.raf); story = null; $('#story').hidden = true; }
+const closeStory = endCut;
+addEventListener('resize', () => { if (story){ talkLayout(); } });
+$('#story').addEventListener('click', e => { if (story && !e.target.closest('button')) story.next(); });
+document.addEventListener('keydown', e => { if (!story || story.ready || $('#story').hidden) return;
+  if (e.key === 'Escape'){ e.preventDefault(); story.done(); return; }
+  if (e.target.closest && e.target.closest('button')) return;
+  if (['Enter', ' ', 'ArrowRight', 'z', 'Z', 'x', 'X'].includes(e.key)){ e.preventDefault(); if (!e.repeat) story.next(); } });
+$('#story-skip').onclick = () => story && story.done();
+// 1) the opening story: first play (before the map), and again from Settings → Story
+function playIntro(fromSettings){ closeModal(); playCut('intro', INTRO_PAGES, () => { if (!S.storySeen){ S.storySeen = true; save(); } resumeMap(); if (fromSettings) toast('📖 Now go bring back the beat!'); }); }
+// 2) after each boss: the boss tells you where the wizard went
+function bossTalk(key, then){ const L = BOSS_TALK[key]; if (!L) return then(); playCut('boss', [Object.assign({ scene:'boss', boss:key }, L)], () => { resumeMap(); then(); }); }
+// 3) the final showdown: the hooded wizard, then Battle / Not yet
 function openStory(first){
   storyFirst = first === true; if (!S.game.inst) return heroPicker(openStory);
   const st = stageState(lastPiece().id, 4); if (!st.open){ toast('🔒 ' + st.why); return; }
-  pauseMap(); const lines = storyLines(), ctl = PQFinale.story($('#story-canvas'), { inst:S.game.inst, hair:S.game.hair });
-  $('#story').hidden = false; $('#talk').hidden = false; $('#story-go').hidden = true; $('#story-skip').hidden = false;
-  story = { ctl, n:-1, lines, ready:false,
-    next(){ if (this.ready) return; if (this.n >= lines.length - 1) return this.done(); const L = lines[++this.n]; ctl.set(L);
-      const who = $('#talk-who'); who.textContent = L.who === 'hero' ? (S.name || 'You') : '🧙 Mr. Kurilla'; who.className = 'talk-who' + (L.who === 'hero' ? ' hero' : '');
-      $('#talk-text').innerHTML = L.t; sfx.blip(); },
-    done(){ this.ready = true; ctl.set({ who:'kurilla', drum:true, cheer:true }); $('#talk').hidden = true; $('#story-skip').hidden = true; $('#story-go').hidden = false; sfx.unlock(); } };
-  story.next();
+  playCut('showdown', SHOWDOWN_PAGES, null, s => { s.ready = true; $('#talk').hidden = true; $('#story-skip').hidden = true; $('#story-go').hidden = false; s.ctl.talk(false); sfx.unlock(); $('#story-fight').focus({ preventScroll:true }); });
 }
-function closeStory(){ if (!story) return; story.ctl.stop(); story = null; $('#story').hidden = true; }
-$('#talk').onclick = () => story && story.next();
-$('#talk').onkeydown = e => { if (story && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); story.next(); } };
-$('#story-skip').onclick = () => story && story.done();
 $('#story-fight').onclick = () => { closeStory(); playStage(lastPiece().id, 4); };
-$('#story-later').onclick = () => { closeStory(); resumeMap(); if (storyFirst) mapCelebrate('final', PIECES.length - 1); else toast(`🧙 Mr. Kurilla is waiting for you in World ${lastPiece().lv}.`); };
+$('#story-later').onclick = () => { closeStory(); resumeMap(); if (storyFirst) mapCelebrate('final', PIECES.length - 1); else toast(`🧙 The wizard is waiting for you in World ${lastPiece().lv}.`); };
 function finalWin(r, startLives, back){
   const first = !S.game.finalBossBeaten; S.game.finalBossBeaten = true; S.game.finalWins = (S.game.finalWins || 0) + 1;
-  const nb = checkBadges({ nosweat: r.lives >= startLives }); save(); sfx.win(); confetti(180); setTimeout(() => confetti(120), 900);
-  back(`<div class="result"><div class="big">🥁 YOU WON!</div><canvas id="res-drum" class="res-drum" width="24" height="20" aria-label="golden snare drum"></canvas>
+  const nb = checkBadges({ nosweat: r.lives >= startLives }); save(); sfx.win(); back();
+  playCut('reveal', REVEAL_PAGES, () => { resumeMap(); confetti(180); setTimeout(() => confetti(120), 900); openModal(`<div class="result"><div class="big">🥁 YOU WON!</div><canvas id="res-drum" class="res-drum" width="24" height="20" aria-label="golden snare drum"></canvas>
     <p><b>Mr. Kurilla</b> is defeated!<br>The <b>GOLDEN SNARE DRUM</b> is yours!<br>🪙 ${r.coins} note coins · ❤️ ${r.lives} lives</p>${badgeHTML(nb)}
     <button class="btn btn-big btn-yellow" id="res-ok">🎉 Celebrate! ➜</button></div>`);
   const c = $('#res-drum'); if (c){ const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(PQSprites.snare(), 0, 0); }
-  $('#res-ok').onclick = closeModal; modalClose = () => playEnding(first);
+  $('#res-ok').onclick = closeModal; modalClose = () => playEnding(first); });
 }
 const ENEMY_NAME = { imp:'Frost Imp', chicken:'Rubber Chicken', ginger:'Gingerbread Grunt', wisp:'Star Wisp', ghost:'Tango Ghost', gremlin:'Sour-Note Gremlin' };
 const BOSS_NAME = { valkyrie:'Skadi the Valkyrie', cluckzilla:'Admiral Cluckzilla', santa:'Santa the Barbarian', dragon:'Deja Vu Dragon', spectro:'Senor Spectro', golem:'Stone Golem' };
@@ -464,6 +506,7 @@ function soundCheck(body){
 }
 function settings(){
   openModal(`<h2 class="pick-title">⚙️ Settings</h2><div class="settings">
+    <button id="story-btn" class="btn btn-wide btn-yellow">📖 Story</button>
     <button id="rename-btn" class="btn btn-wide btn-ghost">✏️ Change nickname</button>
     <div class="sound-check" id="sound-check"><div class="sc-status" id="snd-status" role="status" aria-live="polite"></div>
       <div class="sc-row"><button id="snd-test" class="btn btn-yellow">🔔 Test sound</button><button id="snd-reset" class="btn btn-ghost">🛠️ Reset sound</button></div>
@@ -477,6 +520,7 @@ function settings(){
     ${deferred ? '<button id="install-btn" class="btn btn-wide btn-yellow">📲 Install Band Quest</button>' : ''}
     <p class="hint">🔒 No accounts, no tracking, nothing leaves this device. Progress is saved in this browser only. Recordings open in YouTube’s privacy-enhanced (no-cookie) player only when you tap 🎧.</p>
     <p class="hint">All game art and sounds are original. Music recordings belong to their composers and publishers and are linked from official YouTube channels.</p></div>`, body => {
+    body.querySelector('#story-btn').onclick = () => { if (scStop) scStop(); modalClose = null; playIntro(true); };
     body.querySelector('#rename-btn').onclick = () => { const n = prompt('New nickname or first name (no last names):', S.name); if (n && n.trim()){ S.name = cleanName(n); save(); renderAll(); } };
     body.querySelector('#sound-btn').onclick = () => { S.sound = !S.sound; save(); audioWant(); settings(); };
     body.querySelector('#music-btn').onclick = () => { S.music = !S.music; save(); audioWant(); settings(); };
@@ -507,6 +551,7 @@ function startApp(){
   audioWant();
   $('#screen-welcome').hidden = true; ['#hud','#main'].forEach(s => $(s).hidden = false);
   renderAll(); startMapLoop();
+  if (!S.storySeen) playIntro();   // first play: the opening story comes before the map
   if (memOnly) toast('⚠️ This browser is blocking storage (private mode?). Progress won’t be saved.');
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
 }
@@ -525,7 +570,9 @@ if (S.name) startApp(); else $('#screen-welcome').hidden = false;
 if ('serviceWorker' in navigator && location.protocol !== 'file:'){ const reg = () => navigator.serviceWorker.register('sw.js').catch(()=>{});
   if (document.readyState === 'complete') reg(); else addEventListener('load', reg); }
 window.__PQ = { get state(){ return S; }, PIECES, listenTick, openStory, playEnding, finaleCast, finaleStep(sec){ if (fin) for (let i = 0; i < sec*30; i++) fin.ctl.step(1/30); },
-  get finale(){ return { story:story && { n:story.n, lines:story.lines.length, ready:story.ready, who:story.ctl.state.who, drum:story.ctl.state.drum },
+  get cut(){ return story && { kind:story.kind, n:story.n, pages:story.pages.length, ready:story.ready, scale:story.scale, scene:(story.pages[story.n] || {}).scene, who:(story.pages[story.n] || {}).who || null, text:(story.pages[story.n] || {}).t, shown:Math.floor(story.shown), total:story.total, cols:story.cols }; },
+  cutStep(sec){ if (story) for (let i = 0; i < sec*30; i++){ story.ctl.step(1/30); talkAdvance(1/30); } }, playIntro, TEXT:{ INTRO_PAGES, BOSS_TALK, SHOWDOWN_PAGES, REVEAL_PAGES },
+  get finale(){ return { story:story && { kind:story.kind, n:story.n, lines:story.pages.length, ready:story.ready, scene:(story.pages[story.n] || {}).scene },
     credits:fin && { phase:fin.ctl.state.phase, t:fin.ctl.state.t, total:fin.ctl.total, shown:[...fin.ctl.state.shown], cast:fin.cast.map(g => g.list.map(c => c.name)).flat() }, music:PQGame.finale.playing }; }, get listen(){ return listen && { id:listen.id, api:listen.api, playing:listen.playing }; } };
 if (USING_DRAFT && S.name) toast('🧪 Teacher preview: showing draft worlds on this phone only.');
 })();
