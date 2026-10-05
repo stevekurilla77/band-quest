@@ -217,5 +217,5 @@ function talkBox(c, o){   // o: { who, color, text, shown, done, t, cols }
   let left = o.shown; for (const L of talkLines(o.text, o.cols)){ const cs = chars(L); if (left <= 0) break; SP.text(x, cs.slice(0, left).join(''), 5, y, '#ffffff', '#4a3a7a'); left -= cs.length + 1; y += 10; }
   if (o.done && Math.floor(o.t*2.5) % 2 === 0){ const ax = c.width - 12, ay = c.height - 10; x.fillStyle = '#ffd23f'; x.fillRect(ax, ay, 7, 1); x.fillRect(ax + 1, ay + 1, 5, 1); x.fillRect(ax + 2, ay + 2, 3, 1); x.fillRect(ax + 3, ay + 3, 1, 1); } }
 
-window.PQFinale = { story, scene, credits, wrap, talkLines, talkBox };
+window.PQFinale = { story, scene, credits, wrap, talkLines, talkBox, hooded };
 })();

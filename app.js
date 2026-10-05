@@ -50,7 +50,7 @@ const BADGES = [
   { id:'castle',   e:'🏰', n:'Castle Crusher',  d:'Defeat your first boss' },
   ...PIECES.map(p => ({ id:'boss-'+p.id, e:p.badge.emoji, n:p.badge.name, d:`Defeat ${p.boss}` })),
   { id:'grandtour',e:'🌍', n:'Grand Tour',      d:`Defeat all ${PIECES.length} world bosses` },
-  { id:'goldsnare',e:'🥁', n:'Golden Snare',    d:'Defeat Mr. Kurilla, the final boss' },
+  { id:'goldsnare',e:'🥁', n:'Golden Snare',    d:'Defeat the Purple Wizard, the final boss' },
   { id:'notes500', e:'🪙', n:'Note Collector',  d:'Collect 500 note coins' },
   { id:'notes2000',e:'💰', n:'Note Hoarder',    d:'Collect 2,000 note coins' },
   { id:'neverquit',e:'🔁', n:'Never Give Up',   d:'Use a continue' },
@@ -191,7 +191,7 @@ function mapCelebrate(kind, to){
       <div class="mb-b"><button class="btn btn-yellow" data-open-world="${q.id}">▶ Enter World ${q.lv}</button><button class="btn btn-ghost" data-mb-ok>Later</button></div>`); }
   else { sfx.win(); confetti(160); setTimeout(() => confetti(120), 900);
     mapBanner(`<div class="mb-k">🏆 All worlds complete!</div><div class="mb-t">You beat all ${n} bosses!</div>
-      <div class="mb-s">${S.game.finalBossBeaten ? '🥁 You won the <b>Golden Snare Drum</b>! ' : `🧙 But <b>Mr. Kurilla</b> is still waiting in World ${PIECES[n - 1].lv} for the final showdown! `}Replay any stage to chase a high score, or hear the pieces again for golden instruments.</div>
+      <div class="mb-s">${S.game.finalBossBeaten ? '🥁 You won the <b>Golden Snare Drum</b>! ' : `🧙 But <b>the Purple Wizard</b> is still waiting in World ${PIECES[n - 1].lv} for the final showdown! `}Replay any stage to chase a high score, or hear the pieces again for golden instruments.</div>
       <div class="mb-b">${S.game.finalBossBeaten ? '' : '<button class="btn btn-pink" data-mb-final>🧙 Final showdown</button>'}<button class="btn btn-yellow" data-mb-ok>🎉 Awesome!</button></div>`); }
   focusIsland(to);
 }
@@ -216,7 +216,7 @@ function stagesHTML(id){
 // the final boss lives in the LAST world: a 5th row once that world's boss is beaten, plus "Watch the ending" after Mr. Kurilla is beaten
 function finalRowsHTML(id){
   const st = stageState(id, 4), done = !!S.game.finalBossBeaten;
-  return `<div class="stage final ${st.open?'':'locked'} ${done?'done':''}"><div><b>${done?'🥁':st.open?'🧙':'🔒'} Final Boss: Mr. Kurilla</b>${st.open?'':`<div class="why">${esc(st.why)}</div>`}${done?`<div class="why">Golden Snare won${S.game.finalWins > 1 ? ` · beaten ×${S.game.finalWins}` : ''}</div>`:''}</div>
+  return `<div class="stage final ${st.open?'':'locked'} ${done?'done':''}"><div><b>${done?'🥁':st.open?'🧙':'🔒'} Final Boss: ${done ? 'Mr. Kurilla' : 'Purple Wizard'}</b>${st.open?'':`<div class="why">${esc(st.why)}</div>`}${done?`<div class="why">Golden Snare won${S.game.finalWins > 1 ? ` · beaten ×${S.game.finalWins}` : ''}</div>`:''}</div>
       ${st.open?`<button class="btn btn-pink play-btn" data-final="1">${done?'REPLAY':'PLAY'}</button>`:''}</div>
     ${done ? `<div class="stage done"><div><b>🎬 Watch the ending</b><div class="why">Character parade + THE END</div></div><button class="btn btn-yellow play-btn" data-ending="1">WATCH</button></div>` : ''}`;
 }
@@ -226,10 +226,10 @@ function bossPicHTML(p, w){
   const key = PQSprites.BOSSES.includes((p.world || {}).boss) ? p.world.boss : 'golem', last = p.id === lastPiece().id && w.boss > 0;
   return `<div class="bf boss-pic-wrap${w.boss ? ' beaten' : ''}"><canvas class="boss-pic" data-boss="${key}" role="img" aria-label="${esc(p.boss)}"></canvas>
     ${w.boss ? `<span class="boss-badge">⭐ DEFEATED${w.boss > 1 ? ' ×' + w.boss : ''}</span>` : ''}
-    ${last ? `<div class="kurilla-tease" title="Mr. Kurilla"><canvas class="boss-pic" data-boss="kurilla" role="img" aria-label="Mr. Kurilla"></canvas><span>${S.game.finalBossBeaten ? '🥁 Beaten!' : '🧙 Final boss!'}</span></div>` : ''}</div>`;
+    ${last ? `<div class="kurilla-tease" title="${S.game.finalBossBeaten ? 'Mr. Kurilla' : 'Purple Wizard'}"><canvas class="boss-pic" data-boss="kurilla"${S.game.finalBossBeaten ? '' : ' data-hood="1"'} role="img" aria-label="${S.game.finalBossBeaten ? 'Mr. Kurilla' : 'Purple Wizard'}"></canvas><span>${S.game.finalBossBeaten ? '🥁 Beaten!' : '🧙 Final boss!'}</span></div>` : ''}</div>`;
 }
 function paintBossPics(body){
-  body.querySelectorAll('canvas.boss-pic').forEach(c => { const f = PQSprites.bossFrames(c.dataset.boss).r; c.width = f.width; c.height = f.height;
+  body.querySelectorAll('canvas.boss-pic').forEach(c => { const f = c.dataset.hood ? PQFinale.hooded(1) : PQSprites.bossFrames(c.dataset.boss).r; c.width = f.width; c.height = f.height;   // data-hood: before the reveal, the hooded mystery wizard
     const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(f, 0, 0);
     const big = !c.closest('.kurilla-tease'), sc = big ? Math.max(2, Math.round(128/Math.max(f.width, f.height))) : 2;   // whole-number scale = crisp pixels
     c.style.width = f.width*sc + 'px'; c.style.height = f.height*sc + 'px'; });
@@ -330,7 +330,7 @@ function playStage(id, i, bossHp){
   $('#game').hidden = false; $('#pause-menu').hidden = true; document.body.classList.add('in-game');
   const back = html => { $('#game').hidden = true; document.body.classList.remove('in-game'); renderAll(); startMapLoop(); if (html) openModal(html); };
   PQGame.start($('#game-canvas'), $('#game'), {
-    world:i === 4 ? Object.assign({}, p.world, { boss:'kurilla' }) : p.world, seed:p.id, level:i === 4 ? 'final' : i === 3 ? 'boss' : i, label:i === 4 ? 'FINAL BOSS' : i === 3 ? 'BOSS' : `WORLD ${p.lv}-${i+1}`, bossName:i === 4 ? 'Mr. Kurilla' : p.boss,
+    world:i === 4 ? Object.assign({}, p.world, { boss:'kurilla' }) : p.world, seed:p.id, level:i === 4 ? 'final' : i === 3 ? 'boss' : i, label:i === 4 ? 'FINAL BOSS' : i === 3 ? 'BOSS' : `WORLD ${p.lv}-${i+1}`, bossName:i === 4 ? (S.game.finalBossBeaten ? 'Mr. Kurilla' : 'Purple Wizard') : p.boss,
     inst:S.game.inst, hair:S.game.hair, worldNo:p.lv, lives:S.game.lives, coinBase:S.game.score % 100, bossHp:i >= 3 ? bossHp : 0, golden:!!gw(id).golden, tuba, sfx:S.sound, music:S.music,
     onLifeLost:l => { S.game.lives = Math.max(0, Math.min(LIVES_MAX, l)); save(); },   // also called on a 1-UP
     onPause:pz => { $('#pause-menu').hidden = !pz; },
@@ -377,7 +377,8 @@ const plain = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, 
 const pauseMap = () => { closeModal(); hideMapBanner(); clearTimeout(mapRaf); cancelAnimationFrame(mapRaf); mapRaf = 0; mapFx = null; document.body.classList.add('in-game'); };
 const resumeMap = () => { document.body.classList.remove('in-game'); renderAll(); startMapLoop(); };
 let story = null, fin = null, storyFirst = false;   // story: the cutscene now playing. storyFirst: the showdown opened straight from the last world's first boss win
-// v30 story text (approved by Steve Kurilla, Oct 4 2026). Shown word for word.
+// v30 story text (approved by Steve Kurilla, Oct 4 2026; reveal line updated v31). Shown word for word.
+// Before finalBossBeaten the final boss is only ever called the (Purple) Wizard; Mr. Kurilla's name appears from the reveal on.
 const INTRO_PAGES = [
   { scene:'intro-room', t:"The night before the big winter concert, something terrible happened in the band room..." },
   { scene:'intro-empty', t:"The GOLDEN SNARE DRUM vanished! Without its beat, the whole band falls apart." },
@@ -390,7 +391,7 @@ const BOSS_TALK = {
   dragon:{ who:'Déjà Vu Dragon', color:'#9ef01a', t:"You beat me? You beat me? (Déjà vu...) The drum is in the haunted castle. Hope you like tango!" },
   spectro:{ who:'Señor Spectro', color:'#c9b6ff', t:"Olé! You have rhythm, amigo! The wizard waits just beyond. Go... if you dare!" } };
 const SHOWDOWN_PAGES = [{ scene:'showdown', who:'Purple Wizard', color:'#b48cff', t:"So, you made it. I took the Golden Snare Drum to see who would practice the hardest... Show me what you've got!" }];
-const REVEAL_PAGES = [{ scene:'reveal', who:'Mr. Kurilla', color:'#ffd23f', t:"It was me all along, Mr. Kurilla! You practiced, you never gave up, and that's what real musicians do. The concert is saved!", wait:1.5 }];
+const REVEAL_PAGES = [{ scene:'reveal', who:'Mr. Kurilla', color:'#ffd23f', t:"It was me all along... Mr. Kurilla! You practiced, you never gave up, and that's what real musicians do. The concert is saved!", wait:1.5 }];
 const TYPE_CPS = 45, talkC = $('#talk-canvas');
 const pageLen = (L, cols) => PQFinale.talkLines(L.t, cols).reduce((a, l) => a + [...l].length + 1, 0);
 function talkLayout(){   // pixel-perfect box (3x when there's room, else 2x) sized to fit the longest page of this cutscene, so it never jumps
